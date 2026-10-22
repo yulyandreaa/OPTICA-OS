@@ -32,6 +32,12 @@ const EMPTY: PatientFormInput = {
   acceptDataPolicy: true, acceptMarketing: false,
 };
 
+/**
+ * This form registers other people: the browser must never autofill it with the logged-in user's own data.
+ * Chrome honours autocomplete="off" per field; the data-* flags keep password managers out too.
+ */
+const NO_AUTOFILL = { autoComplete: "off", "data-1p-ignore": true, "data-lpignore": "true" } as const;
+
 const RELATION_ICONS: Record<Relation, typeof ShoppingBag> = { customer: ShoppingBag, patient: HeartPulse, both: UsersRound };
 const MATCH_REASONS: Record<string, string> = {
   document: "mismo documento", document_number: "mismo número con otro tipo", name: "mismo nombre", phone: "mismo teléfono", email: "mismo correo",
@@ -107,7 +113,7 @@ export function PatientForm({ patientId, defaults, branches }: {
   });
 
   return (
-    <form onSubmit={onSubmit} noValidate className="rounded-2xl border bg-surface p-6 shadow-soft sm:p-8">
+    <form onSubmit={onSubmit} noValidate autoComplete="off" className="rounded-2xl border bg-surface p-6 shadow-soft sm:p-8">
       <Section title="Tipo de registro" description="Una persona tiene un solo registro, aunque compre y también reciba atención.">
         <div role="radiogroup" aria-label="Tipo de registro" className="grid gap-3 sm:grid-cols-3">
           {(Object.keys(RELATIONS) as Relation[]).map((r) => {
@@ -134,14 +140,14 @@ export function PatientForm({ patientId, defaults, branches }: {
             </NativeSelect>
           </FormField>
           <FormField id="documentNumber" label="Número" error={err("documentNumber")}>
-            <Input id="documentNumber" inputMode="numeric" autoFocus={!patientId} className="tabular" aria-invalid={!!errors.documentNumber} {...reg("documentNumber")} />
+            <Input id="documentNumber" {...NO_AUTOFILL} inputMode="numeric" autoFocus={!patientId} className="tabular" aria-invalid={!!errors.documentNumber} {...reg("documentNumber")} />
           </FormField>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField id="firstName" label="Primer nombre" error={err("firstName")}><Input id="firstName" aria-invalid={!!errors.firstName} {...reg("firstName")} /></FormField>
-          <FormField id="middleName" label="Segundo nombre" optional><Input id="middleName" {...reg("middleName")} /></FormField>
-          <FormField id="lastName" label="Primer apellido" error={err("lastName")}><Input id="lastName" aria-invalid={!!errors.lastName} {...reg("lastName")} /></FormField>
-          <FormField id="secondLastName" label="Segundo apellido" optional><Input id="secondLastName" {...reg("secondLastName")} /></FormField>
+          <FormField id="firstName" label="Primer nombre" error={err("firstName")}><Input id="firstName" {...NO_AUTOFILL} aria-invalid={!!errors.firstName} {...reg("firstName")} /></FormField>
+          <FormField id="middleName" label="Segundo nombre" optional><Input id="middleName" {...NO_AUTOFILL} {...reg("middleName")} /></FormField>
+          <FormField id="lastName" label="Primer apellido" error={err("lastName")}><Input id="lastName" {...NO_AUTOFILL} aria-invalid={!!errors.lastName} {...reg("lastName")} /></FormField>
+          <FormField id="secondLastName" label="Segundo apellido" optional><Input id="secondLastName" {...NO_AUTOFILL} {...reg("secondLastName")} /></FormField>
         </div>
         {matches.length > 0 && (
           <div role="status" className={cn("grid gap-2 rounded-xl border p-3 text-sm", sameDocument ? "border-destructive/40 bg-danger-soft" : "border-warning/40 bg-warning-soft")}>
@@ -183,8 +189,8 @@ export function PatientForm({ patientId, defaults, branches }: {
 
       <Section title="Contacto" description="Opcional. Lo usaremos para confirmaciones y avisos de entrega.">
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField id="phone" label="Celular" error={err("phone")} optional><Input id="phone" type="tel" placeholder="300 123 4567" {...reg("phone")} /></FormField>
-          <FormField id="email" label="Correo" error={err("email")} optional><Input id="email" type="email" {...reg("email")} /></FormField>
+          <FormField id="phone" label="Celular" error={err("phone")} optional><Input id="phone" {...NO_AUTOFILL} type="tel" placeholder="300 123 4567" {...reg("phone")} /></FormField>
+          <FormField id="email" label="Correo" error={err("email")} optional><Input id="email" {...NO_AUTOFILL} type="email" {...reg("email")} /></FormField>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField id="contactPreference" label="Prefiere que lo contacten por">
@@ -202,7 +208,7 @@ export function PatientForm({ patientId, defaults, branches }: {
       </Section>
 
       <Section title="Ubicación y ocupación">
-        <FormField id="address" label="Dirección" optional><Input id="address" {...reg("address")} /></FormField>
+        <FormField id="address" label="Dirección" optional><Input id="address" {...NO_AUTOFILL} {...reg("address")} /></FormField>
         <div className="grid gap-4 sm:grid-cols-3">
           <FormField id="department" label="Departamento" optional>
             <SearchSelect id="department" value={department} options={DEPARTMENT_OPTIONS} emptyText="No encontramos ese departamento."
@@ -219,7 +225,7 @@ export function PatientForm({ patientId, defaults, branches }: {
               onBlur={() => form.trigger("city")}
               onChange={(v) => form.setValue("city", v, { shouldDirty: true })} />
           </FormField>
-          <FormField id="occupation" label="Ocupación" optional><Input id="occupation" {...reg("occupation")} /></FormField>
+          <FormField id="occupation" label="Ocupación" optional><Input id="occupation" {...NO_AUTOFILL} {...reg("occupation")} /></FormField>
         </div>
         {branches.length > 1 && (
           <FormField id="homeBranchId" label="Sede habitual" optional>
@@ -233,7 +239,7 @@ export function PatientForm({ patientId, defaults, branches }: {
       {isPatient && (
         <Section title="Aseguramiento" description="Datos administrativos para RIPS. Diagnósticos y fórmulas se registran en la consulta, no aquí.">
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="eps" label="EPS" optional><Input id="eps" {...reg("eps")} /></FormField>
+            <FormField id="eps" label="EPS" optional><Input id="eps" {...NO_AUTOFILL} {...reg("eps")} /></FormField>
             <FormField id="healthRegime" label="Régimen" optional>
               <NativeSelect id="healthRegime" {...reg("healthRegime")}>
                 <option value="">—</option>
@@ -245,7 +251,7 @@ export function PatientForm({ patientId, defaults, branches }: {
       )}
 
       <Section title="Notas internas" description="Visibles para tu equipo. No escribas datos clínicos.">
-        <FormField id="notes" label="Notas" optional><Textarea id="notes" rows={3} {...reg("notes")} /></FormField>
+        <FormField id="notes" label="Notas" optional><Textarea id="notes" {...NO_AUTOFILL} rows={3} {...reg("notes")} /></FormField>
       </Section>
 
       {!patientId && (

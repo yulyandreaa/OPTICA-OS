@@ -74,7 +74,7 @@ export function DatePicker({
         <input
           id={id}
           inputMode="numeric"
-          autoComplete="bday"
+          autoComplete="off"
           placeholder="dd/mm/aaaa"
           aria-invalid={invalid}
           value={text}
