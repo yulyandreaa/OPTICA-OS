@@ -1,7 +1,7 @@
 import "server-only";
 import type { ServerSupabase } from "@/lib/supabase/server";
 import type { PatientListParams } from "../schemas";
-import { searchFilter } from "../utils/search";
+import { nameOrEmailFilter, searchFilter } from "../utils/search";
 
 export const PAGE_SIZE = 25;
 
@@ -56,7 +56,8 @@ function applySearch<Q extends { ilike: any; or: any }>(query: Q, raw: string): 
   if (f.kind === "email") return query.ilike("email", `${f.value}%`);
   if (f.kind === "number") return query.or(`document_number.ilike.${f.value}%,phone.ilike.%${f.value}%,whatsapp.ilike.%${f.value}%`);
   if (f.kind === "document") return query.ilike("document_number", `${f.value}%`);
-  return query.ilike("full_name", `%${f.value}%`);
+  const either = nameOrEmailFilter(f.value);
+  return either ? query.or(either) : query.ilike("full_name", `%${f.value}%`);
 }
 
 export async function getPeopleSummary(db: ServerSupabase, tenantId: string) {

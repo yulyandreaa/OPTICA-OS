@@ -3,7 +3,7 @@ import { CornerDownLeft, Search, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import {
-  CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator,
+  Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator,
 } from "@/components/ui/command";
 import { globalSearchAction, type SearchHit } from "@/modules/search/actions";
 import { NAV_PAGES } from "./nav-config";
@@ -51,17 +51,22 @@ export function CommandBar() {
   const actions = UNIVERSAL_ACTIONS.filter((a) => shell.can(a.permission));
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen} title="Buscar" description="Busca pacientes, documentos, teléfonos o acciones" className="sm:max-w-xl">
-      <CommandInput placeholder="Busca un paciente, documento, teléfono o acción…" value={query} onValueChange={setQuery} />
+    <CommandDialog open={open} onOpenChange={setOpen} title="Buscar" description="Busca personas, documentos, teléfonos o acciones" className="sm:max-w-xl">
+      {/* CommandDialog is only the dialog shell: cmdk's parts must live inside <Command> or they crash. */}
+      <Command>
+      <CommandInput placeholder="Nombre, documento, teléfono, correo o acción…" value={query} onValueChange={setQuery} />
       <CommandList className="max-h-[420px]">
         <CommandEmpty>{searching ? "Buscando…" : "Sin resultados. Prueba con el documento o el teléfono."}</CommandEmpty>
         {visibleHits.length > 0 && (
-          <CommandGroup heading="Pacientes">
+          <CommandGroup heading="Clientes y pacientes">
             {visibleHits.map((h) => (
-              <CommandItem key={h.id} value={`${h.title} ${h.subtitle} ${h.id}`} onSelect={() => go(h.href)}>
+              // The server already matched the query; `keywords` keeps cmdk's own filter from hiding the hit.
+              <CommandItem key={h.id} value={`persona ${h.id}`} keywords={[query]} onSelect={() => go(h.href)}>
                 <UserRound className="size-4" />
-                <span className="truncate">{h.title}</span>
-                <span className="ml-auto truncate text-xs text-muted-foreground tabular">{h.subtitle}</span>
+                <span className="min-w-0">
+                  <span className="block truncate">{h.title}{h.badge && <span className="ml-2 text-xs text-muted-foreground">{h.badge}</span>}</span>
+                  <span className="block truncate text-xs text-muted-foreground tabular">{h.subtitle}</span>
+                </span>
               </CommandItem>
             ))}
           </CommandGroup>
@@ -87,6 +92,7 @@ export function CommandBar() {
         <span>↑↓ navegar</span>
         <span className="ml-auto">esc cerrar</span>
       </div>
+      </Command>
     </CommandDialog>
   );
 }
@@ -100,7 +106,7 @@ export function SearchTrigger() {
       className="flex h-8 w-full max-w-sm items-center gap-2 rounded-lg border bg-surface px-2.5 text-sm text-muted-foreground shadow-soft outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40"
     >
       <Search className="size-4" />
-      <span className="truncate">Buscar pacientes, documentos…</span>
+      <span className="truncate">Buscar personas, documentos…</span>
       <kbd className="ml-auto hidden rounded border bg-muted px-1.5 font-mono text-[10px] sm:inline">⌘K</kbd>
     </button>
   );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { searchFilter } from "./search";
+import { nameOrEmailFilter, searchFilter } from "./search";
 
 describe("searchFilter", () => {
   it("clasifica la búsqueda para usar un solo índice", () => {
@@ -12,5 +12,12 @@ describe("searchFilter", () => {
 
   it("neutraliza caracteres que alterarían el filtro", () => {
     expect(searchFilter("ana,(x)%")).toEqual({ kind: "name", value: "ana  x" });
+  });
+});
+
+describe("nameOrEmailFilter", () => {
+  it("una sola palabra busca también el inicio del correo", () => {
+    expect(nameOrEmailFilter("YulyAndrea")).toBe("full_name.ilike.%YulyAndrea%,email.ilike.yulyandrea%");
+    expect(nameOrEmailFilter("Yuly Andrea")).toBeNull();
   });
 });

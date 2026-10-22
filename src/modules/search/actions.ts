@@ -3,12 +3,16 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getAppContext } from "@/modules/tenants/services/context";
 import { can } from "@/modules/authz/permissions";
+import { RELATIONS, relationOf } from "@/modules/patients/schemas";
+import { nameOrEmailFilter, searchFilter } from "@/modules/patients/utils/search";
 
 export interface SearchHit {
   type: "patient" | "appointment";
   id: string;
   title: string;
   subtitle: string;
+  /** Relationship / state label, e.g. "Cliente y paciente · inactivo". */
+  badge?: string;
   href: string;
 }
 
@@ -20,26 +24,34 @@ export async function globalSearchAction(raw: string): Promise<SearchHit[]> {
   if (!parsed.success) return [];
   const ctx = await getAppContext();
   if (!ctx) return [];
-  const q = parsed.data.replace(/[%_,()]/g, " ");
+  const q = parsed.data;
   const supabase = await createClient();
   const hits: SearchHit[] = [];
 
   if (can(ctx.grants, "patients.read")) {
-    const digits = q.replace(/\D/g, "");
+    // Same rules as the directory (one indexed predicate per kind of input). No clinical columns are read.
+    const f = searchFilter(q);
     let query = supabase
       .from("patients")
-      .select("id, full_name, document_type, document_number, phone")
+      .select("id, full_name, document_type, document_number, phone, email, is_customer, is_patient, is_active")
       .eq("tenant_id", ctx.tenant.id)
       .is("deleted_at", null)
-      .limit(6);
-    query = digits.length >= 4
-      ? query.or(`document_number.ilike.${digits}%,phone.ilike.%${digits}%`)
-      : query.ilike("full_name", `%${q}%`);
+      .order("is_active", { ascending: false })
+      .order("full_name")
+      .limit(8);
+    if (f.kind === "email") query = query.ilike("email", `${f.value}%`);
+    else if (f.kind === "number") query = query.or(`document_number.ilike.${f.value}%,phone.ilike.%${f.value}%,whatsapp.ilike.%${f.value}%`);
+    else if (f.kind === "document") query = query.ilike("document_number", `${f.value}%`);
+    else {
+      const either = nameOrEmailFilter(f.value);
+      query = either ? query.or(either) : query.ilike("full_name", `%${f.value}%`);
+    }
     const { data } = await query;
     for (const p of data ?? []) {
       hits.push({
         type: "patient", id: p.id, title: p.full_name, href: `/pacientes/${p.id}`,
-        subtitle: `${p.document_type} ${p.document_number}${p.phone ? ` · ${p.phone}` : ""}`,
+        subtitle: [`${p.document_type} ${p.document_number}`, p.phone, p.email].filter(Boolean).join(" · "),
+        badge: `${RELATIONS[relationOf(p)]}${p.is_active ? "" : " · inactivo"}`,
       });
     }
   }

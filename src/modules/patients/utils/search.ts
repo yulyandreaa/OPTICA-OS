@@ -11,3 +11,8 @@ export function searchFilter(raw: string) {
   if (digits.length >= 4 && !/[A-Za-zÀ-ÿ]/.test(q)) return { kind: "number" as const, value: digits };
   return { kind: "name" as const, value: q };
 }
+
+/** PostgREST filter for a name query: a single word also matches the start of the e-mail ("yulyandrea…"). */
+export function nameOrEmailFilter(value: string) {
+  return /\s/.test(value) ? null : `full_name.ilike.%${value}%,email.ilike.${value.toLowerCase()}%`;
+}
