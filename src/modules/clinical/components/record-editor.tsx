@@ -78,6 +78,7 @@ export function RecordEditor({ recordId, initial, patientName, canSign }: { reco
   const [signing, startSign] = useTransition();
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [signError, setSignError] = useState<string | null>(null);
   const [customDx, setCustomDx] = useState({ code: "", label: "" });
   const latest = useRef(data);
   useEffect(() => { latest.current = data; }, [data]);
@@ -113,12 +114,23 @@ export function RecordEditor({ recordId, initial, patientName, canSign }: { reco
     setDirty(false); setSavedAt(new Date()); toast.success("Borrador guardado");
   });
 
-  const sign = () => startSign(async () => {
+  const sign = () => {
+    // The database refuses to sign without a chief complaint: say so next to the field, not only in a toast.
+    if (!(data.chief_complaint ?? "").trim()) {
+      setSignError("Escribe el motivo de consulta para poder firmar.");
+      const field = document.getElementById("chief_complaint");
+      field?.scrollIntoView({ behavior: "smooth", block: "center" });
+      field?.focus({ preventScroll: true });
+      toast.error("Falta el motivo de consulta: es obligatorio para firmar.");
+      return;
+    }
+    startSign(async () => {
     const res = await signRecordAction(recordId, data);
     if (!res.ok) { toast.error(res.error); return; }
     toast.success(res.data.prescriptionId ? "Historia firmada y fórmula emitida" : "Historia firmada");
     router.refresh();
-  });
+    });
+  };
 
   const dx = data.diagnoses ?? [];
   const lens = data.lens_recommendation ?? {};
@@ -139,8 +151,9 @@ export function RecordEditor({ recordId, initial, patientName, canSign }: { reco
                 {Object.entries(RECORD_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </NativeSelect>
             </FormField>
-            <FormField id="chief_complaint" label="Motivo de consulta">
-              <Input id="chief_complaint" value={data.chief_complaint ?? ""} onChange={(e) => set("chief_complaint", e.target.value)} placeholder="Ej.: visión borrosa de lejos" />
+            <FormField id="chief_complaint" label="Motivo de consulta · obligatorio para firmar" error={signError ?? undefined}>
+              <Input id="chief_complaint" aria-invalid={!!signError} value={data.chief_complaint ?? ""}
+                onChange={(e) => { set("chief_complaint", e.target.value); if (e.target.value.trim()) setSignError(null); }} placeholder="Ej.: visión borrosa de lejos" />
             </FormField>
           </div>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
