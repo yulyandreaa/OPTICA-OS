@@ -24,6 +24,14 @@
   --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
+  /* Data-viz categorical slots (validated: dataviz validate_palette.js, light + dark) */
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-series-3: var(--series-3);
+  --color-series-4: var(--series-4);
+  --color-series-5: var(--series-5);
+  --color-series-7: var(--series-7);
+  --color-series-other: var(--series-other);
   --color-danger-soft: var(--danger-soft);
 
   --color-sidebar-ring: var(--sidebar-ring);
@@ -96,6 +104,13 @@
   --success: oklch(0.6 0.14 155);
   --success-soft: oklch(0.96 0.04 155);
   --warning: oklch(0.7 0.15 70);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-7: #6250d6;
+  --series-other: oklch(0.8 0.01 260);
   --warning-soft: oklch(0.97 0.04 85);
   --danger-soft: oklch(0.96 0.03 25);
 
@@ -117,6 +132,13 @@
 }
 
 .dark {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-7: #9085e9;
+  --series-other: oklch(0.45 0.01 265);
   --brand-soft: color-mix(in oklch, var(--brand) 18%, black);
   --background: oklch(0.16 0.01 265);
   --surface: oklch(0.2 0.01 265);

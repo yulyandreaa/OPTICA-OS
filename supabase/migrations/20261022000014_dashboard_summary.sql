@@ -37,7 +37,7 @@ begin
   v_today := (now() at time zone v_tz)::date;
 
   with s as (
-    select sa.id, sa.branch_id, sa.total, sa.tax_total, sa.balance, sa.created_at,
+    select sa.id, sa.branch_id, sa.seller_id, sa.patient_id, sa.number, sa.total, sa.tax_total, sa.balance, sa.created_at,
            (sa.created_at at time zone v_tz)::date as day
       from public.sales sa
      where sa.tenant_id = p_tenant and sa.status in ('partial', 'paid')
@@ -46,7 +46,8 @@ begin
   cur as (select * from s where day between p_from and p_to),
   prv as (select * from s where day between p_prev_from and p_prev_to),
   items as (
-    select si.line_total - si.tax_amount as net, si.unit_cost * si.quantity as cost, si.unit_cost > 0 as costed, s.day
+    select si.line_total - si.tax_amount as net, si.unit_cost * si.quantity as cost, si.unit_cost > 0 as costed, s.day,
+           si.variant_id, si.description, si.quantity, coalesce(nullif(si.category, ''), 'Otros') as category
       from public.sale_items si join s on s.id = si.sale_id
      where s.day between p_from and p_to or s.day between p_prev_from and p_prev_to
   ),
@@ -70,12 +71,20 @@ begin
       from (select distinct date_trunc(p_bucket, d)::date as b from generate_series(p_prev_from, p_prev_to, interval '1 day') d) x
   ),
   stock as (
-    select v.id, coalesce(sum(l.quantity), 0) as qty, coalesce(min(l.min_quantity), 1) as min_qty
+    select v.id, c.name as category, coalesce(sum(l.quantity), 0) as qty, coalesce(min(l.min_quantity), 1) as min_qty
       from public.product_variants v
       join public.products p on p.id = v.product_id
+      join public.product_categories c on c.id = p.category_id
       left join public.inventory_levels l on l.variant_id = v.id and (p_branch is null or l.branch_id = p_branch)
      where v.tenant_id = p_tenant and v.is_active and p.is_active and p.is_stocked
-     group by v.id
+     group by v.id, c.name
+  ),
+  late as (
+    select lo.id, lo.number, v_today - lo.estimated_at as days_late
+      from public.lab_orders lo
+     where lo.tenant_id = p_tenant and (p_branch is null or lo.branch_id = p_branch)
+       and lo.status not in ('received', 'delivered', 'cancelled')
+       and lo.estimated_at is not null and lo.estimated_at < v_today
   )
   select jsonb_build_object(
     'current', jsonb_build_object(
@@ -117,26 +126,55 @@ begin
         left join (select date_trunc(p_bucket, day)::date as b, sum(total - tax_total) as net from prv group by 1) p on p.b = pb.b
     ),
     'by_branch', (
-      select coalesce(jsonb_agg(jsonb_build_object('branch_id', br.id, 'name', br.name, 'net', coalesce(x.net, 0), 'count', coalesce(x.n, 0))
+      select coalesce(jsonb_agg(jsonb_build_object('branch_id', br.id, 'name', br.name, 'net', coalesce(x.net, 0), 'count', coalesce(x.n, 0),
+                                                   'prev_net', coalesce(x.prev_net, 0), 'prev_count', coalesce(x.prev_n, 0))
                                 order by coalesce(x.net, 0) desc, br.name), '[]'::jsonb)
         from public.branches br
         left join (
-          select sa.branch_id, sum(sa.total - sa.tax_total) as net, count(*) as n
-            from public.sales sa
+          select sa.branch_id,
+                 sum(sa.total - sa.tax_total) filter (where d between p_from and p_to) as net,
+                 count(*) filter (where d between p_from and p_to) as n,
+                 sum(sa.total - sa.tax_total) filter (where d between p_prev_from and p_prev_to) as prev_net,
+                 count(*) filter (where d between p_prev_from and p_prev_to) as prev_n
+            from public.sales sa, lateral (select (sa.created_at at time zone v_tz)::date as d) dd
            where sa.tenant_id = p_tenant and sa.status in ('partial', 'paid')
-             and (sa.created_at at time zone v_tz)::date between p_from and p_to
            group by sa.branch_id
         ) x on x.branch_id = br.id
        where br.tenant_id = p_tenant and br.deleted_at is null
     ),
+    'by_category', (
+      select coalesce(jsonb_agg(jsonb_build_object('category', category, 'net', net) order by net desc), '[]'::jsonb)
+        from (select category, sum(net) as net from items where day between p_from and p_to group by category having sum(net) > 0) c
+    ),
+    'top_products', (
+      select coalesce(jsonb_agg(jsonb_build_object('description', t.description, 'quantity', t.qty, 'net', t.net, 'image_url', v.image_url) order by t.net desc), '[]'::jsonb)
+        from (
+          select variant_id, min(description) as description, sum(quantity) as qty, sum(net) as net
+            from items where day between p_from and p_to
+           group by variant_id, case when variant_id is null then description end
+           order by sum(net) desc limit 5
+        ) t left join public.product_variants v on v.id = t.variant_id
+    ),
+    'by_seller', (
+      select coalesce(jsonb_agg(jsonb_build_object('seller_id', x.seller_id, 'name', coalesce(nullif(p.full_name, ''), p.email), 'net', x.net, 'count', x.n)
+                                order by x.net desc), '[]'::jsonb)
+        from (select seller_id, sum(total - tax_total) as net, count(*) as n from cur group by seller_id order by 2 desc limit 5) x
+        join public.profiles p on p.id = x.seller_id
+    ),
     'alerts', jsonb_build_object(
       'low_stock', (select count(*) from stock where qty > 0 and qty <= min_qty),
       'out_of_stock', (select count(*) from stock where qty <= 0),
-      'late_lab_orders', (
-        select count(*) from public.lab_orders lo
-         where lo.tenant_id = p_tenant and (p_branch is null or lo.branch_id = p_branch)
-           and lo.status not in ('received', 'delivered', 'cancelled')
-           and lo.estimated_at is not null and lo.estimated_at < v_today)
+      'low_stock_by_category', (
+        select coalesce(jsonb_agg(jsonb_build_object('category', category, 'count', n) order by n desc, category), '[]'::jsonb)
+          from (select category, count(*) as n from stock where qty <= min_qty group by category) c),
+      'late_lab_orders', (select count(*) from late),
+      'late_orders', (
+        select coalesce(jsonb_agg(jsonb_build_object('id', id, 'number', number, 'days_late', days_late) order by days_late desc, number), '[]'::jsonb)
+          from (select * from late order by days_late desc, number limit 3) l),
+      'overdue', (
+        select coalesce(jsonb_agg(jsonb_build_object('sale_id', o.id, 'number', o.number, 'customer', pt.full_name, 'balance', o.balance) order by o.balance desc), '[]'::jsonb)
+          from (select * from s where balance > 0 and day < v_today - 30 order by balance desc limit 3) o
+          left join public.patients pt on pt.id = o.patient_id)
     )
   ) into v_result;
   return v_result;

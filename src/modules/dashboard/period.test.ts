@@ -37,6 +37,11 @@ describe("resolvePeriod", () => {
     expect(resolvePeriod({ periodo: "rango", desde: "x", hasta: "y" }, today).key).toBe("mes");
   });
 
+  it("permite cambiar la agrupación solo a opciones coherentes con el rango", () => {
+    expect(resolvePeriod({ agrupar: "week" }, today).bucket).toBe("week");
+    expect(resolvePeriod({ periodo: "hoy", agrupar: "month" }, today)).toMatchObject({ bucket: "day", allowedBuckets: ["day"] });
+  });
+
   it("la granularidad se adapta al rango", () => {
     expect([bucketFor(1), bucketFor(31), bucketFor(32), bucketFor(120), bucketFor(121)]).toEqual(["day", "day", "week", "week", "month"]);
   });
@@ -56,7 +61,8 @@ describe("marginState", () => {
     previous: { net_sales: 0, sales_count: 0, margin: 0, costed_net: 0, items_net: 0, collected: 0 },
     first_sale_day: null as string | null,
     receivables: { total: 0, count: 0, overdue_total: 0, overdue_count: 0 },
-    series: [], by_branch: [], alerts: { low_stock: 0, out_of_stock: 0, late_lab_orders: 0 },
+    series: [], by_branch: [], by_category: [], top_products: [], by_seller: [],
+    alerts: { low_stock: 0, out_of_stock: 0, late_lab_orders: 0, low_stock_by_category: [], late_orders: [], overdue: [] },
   };
   const with_ = (current: Partial<typeof base.current>, previous: Partial<typeof base.previous> = {}) =>
     parseSummary({ ...base, current: { ...base.current, ...current }, previous: { ...base.previous, ...previous } });
@@ -85,7 +91,8 @@ describe("canCompare", () => {
     current: { net_sales: 900, gross_sales: 0, sales_count: 9, margin: 0, costed_net: 0, items_net: 0, uncosted_lines: 0, collected: 0, payments_count: 0, voided_count: 0, voided_net: 0 },
     previous: { net_sales: 10, sales_count: prevSales, margin: 0, costed_net: 0, items_net: 0, collected: 0 },
     first_sale_day: first, receivables: { total: 0, count: 0, overdue_total: 0, overdue_count: 0 },
-    series: [], by_branch: [], alerts: { low_stock: 0, out_of_stock: 0, late_lab_orders: 0 },
+    series: [], by_branch: [], by_category: [], top_products: [], by_seller: [],
+    alerts: { low_stock: 0, out_of_stock: 0, late_lab_orders: 0, low_stock_by_category: [], late_orders: [], overdue: [] },
   });
 
   it("no compara si el historial empieza después del inicio del período anterior (evita +4000%)", () => {

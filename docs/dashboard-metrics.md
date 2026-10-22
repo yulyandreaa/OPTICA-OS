@@ -47,15 +47,25 @@ La comparación (%) se muestra solo si:
 
 Si no, la tarjeta no muestra variación y el dashboard lo explica.
 
-Granularidad del gráfico: día (≤ 31 días), semana (≤ 120 días), mes (más).
+Granularidad por defecto del gráfico: día (≤ 31 días), semana (≤ 120 días), mes (más).
+
+## Bloques de detalle (período seleccionado, solo ventas válidas)
+| Bloque | Regla |
+|---|---|
+| Ventas por categoría | Σ neto de líneas por `sale_items.category`. Colores fijos por categoría (Monturas, Lentes oftálmicos, Lentes de contacto, Accesorios, Gafas de sol); el resto se agrupa en "Otros". |
+| Rendimiento por sede | Ventas netas por sede; la variación % usa la misma regla de comparación y exige ≥ 3 ventas de esa sede en el período anterior. Tocar una sede filtra toda la app. |
+| Top 5 productos | Neto por variante (o por descripción en ítems de texto libre). |
+| Asesores con más ventas | Neto y número de ventas por `sales.seller_id`. |
+
+Agrupación del gráfico (`?agrupar=`): días hasta 92 días, semanas desde 8 días, meses desde 32 días.
 
 ## Alertas
 | Alerta | Regla | Enlace |
 |---|---|---|
 | Productos agotados | variantes activas con stock ≤ 0 en la(s) sede(s) | `/inventario?tab=stock&filtro=agotado` |
 | Stock bajo | stock > 0 y ≤ mínimo (`inventory_levels.min_quantity`) | `/inventario?tab=stock&filtro=bajo` |
-| Órdenes ópticas retrasadas | `estimated_at` < hoy y estado anterior a "recibida en óptica" | `/ordenes?atrasadas=1` |
-| Cartera vencida | ver arriba | `/ventas?estado=partial&vencidas=1` |
+| Órdenes ópticas retrasadas | `estimated_at` < hoy y estado anterior a "recibida en óptica"; detalle de las 3 con más días de retraso | `/ordenes?atrasadas=1` |
+| Cartera vencida | ver arriba; detalle de los 3 saldos más altos por cliente | `/ventas?estado=partial&vencidas=1` |
 | Cierres de caja pendientes | **pendiente**: el módulo de caja no existe todavía | — |
 
 ## Datos de demostración

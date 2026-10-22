@@ -13,8 +13,16 @@ const summarySchema = z.object({
   first_sale_day: z.string().nullable(),
   receivables: z.object({ total: num, count: num, overdue_total: num, overdue_count: num }),
   series: z.array(z.object({ bucket: z.string(), net: num, count: num, prev_bucket: z.string().nullable(), prev_net: num })),
-  by_branch: z.array(z.object({ branch_id: z.string(), name: z.string(), net: num, count: num })),
-  alerts: z.object({ low_stock: num, out_of_stock: num, late_lab_orders: num }),
+  by_branch: z.array(z.object({ branch_id: z.string(), name: z.string(), net: num, count: num, prev_net: num, prev_count: num })),
+  by_category: z.array(z.object({ category: z.string(), net: num })),
+  top_products: z.array(z.object({ description: z.string(), quantity: num, net: num, image_url: z.string().nullable() })),
+  by_seller: z.array(z.object({ seller_id: z.string(), name: z.string().nullable(), net: num, count: num })),
+  alerts: z.object({
+    low_stock: num, out_of_stock: num, late_lab_orders: num,
+    low_stock_by_category: z.array(z.object({ category: z.string(), count: num })),
+    late_orders: z.array(z.object({ id: z.string(), number: z.string(), days_late: num })),
+    overdue: z.array(z.object({ sale_id: z.string(), number: z.string(), customer: z.string().nullable(), balance: num })),
+  }),
 });
 export type DashboardSummary = z.infer<typeof summarySchema>;
 

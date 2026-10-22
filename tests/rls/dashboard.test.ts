@@ -88,8 +88,20 @@ describe("dashboard del administrador", () => {
     expect(branches.map((b) => [b.name, b.net])).toEqual([["Norte", 200000], ["Centro", 100000]]);
   });
 
-  it("alerta órdenes atrasadas", async () => {
-    expect((await summary(owner)).alerts!.late_lab_orders).toBe(1);
+  it("alerta órdenes atrasadas con su detalle y la cartera vencida por cliente", async () => {
+    const a = (await summary(owner)).alerts as unknown as { late_lab_orders: number; late_orders: { days_late: number }[]; overdue: { customer: string; balance: number }[] };
+    expect(a.late_lab_orders).toBe(1);
+    expect(a.late_orders[0]!.days_late).toBe(3);
+    expect(a.overdue).toEqual([expect.objectContaining({ customer: "Ana Ruiz", balance: 119000 })]);
+  });
+
+  it("agrupa por categoría, producto y asesor solo con ventas válidas", async () => {
+    const r = await summary(owner) as unknown as {
+      by_category: { category: string; net: number }[]; top_products: { description: string; net: number }[]; by_seller: { name: string; net: number; count: number }[];
+    };
+    expect(r.by_category.map((c) => c.category).sort()).toEqual(["Monturas", "Otros"]);
+    expect(r.top_products.map((p) => [p.description, p.net])).toEqual([["Lente progresivo", 200000], ["Montura", 100000]]);
+    expect(r.by_seller).toEqual([expect.objectContaining({ name: "Dueña", net: 300000, count: 2 })]);
   });
 
   it("el asesor comercial no puede ver los indicadores financieros", async () => {

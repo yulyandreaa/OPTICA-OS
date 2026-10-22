@@ -10,6 +10,8 @@ export interface Period {
   prevFrom: string;
   prevTo: string;
   bucket: Bucket;
+  /** Granularities that make sense for this range (the chart lets the user switch among them). */
+  allowedBuckets: Bucket[];
   label: string;
   prevLabel: string;
 }
@@ -50,6 +52,11 @@ export function bucketFor(days: number): Bucket {
   return days <= 31 ? "day" : days <= 120 ? "week" : "month";
 }
 
+/** Days up to ~3 months, weeks from 8 days, months from 32 days. */
+export function allowedBuckets(days: number): Bucket[] {
+  return (["day", "week", "month"] as const).filter((b) => (b === "day" ? days <= 92 : b === "week" ? days >= 8 : days >= 32));
+}
+
 const fmt = (key: string, opts: Intl.DateTimeFormatOptions) =>
   new Intl.DateTimeFormat("es-CO", { ...opts, timeZone: "UTC" }).format(new Date(`${key}T12:00:00Z`));
 const rangeLabel = (from: string, to: string) =>
@@ -60,7 +67,7 @@ const rangeLabel = (from: string, to: string) =>
  * yesterday for today, the previous 7 days, the same days of the previous month for month-to-date,
  * the whole month before for "mes anterior", and an equally long window right before a custom range.
  */
-export function resolvePeriod(params: { periodo?: string; desde?: string; hasta?: string }, today: string): Period {
+export function resolvePeriod(params: { periodo?: string; desde?: string; hasta?: string; agrupar?: string }, today: string): Period {
   let key = (PERIOD_OPTIONS.some((o) => o.key === params.periodo) ? params.periodo : "mes") as PeriodKey;
   let from: string, to: string, prevFrom: string, prevTo: string;
 
@@ -97,7 +104,10 @@ export function resolvePeriod(params: { periodo?: string; desde?: string; hasta?
 
   const label = key === "hoy" ? "Hoy" : key === "mes" ? `${fmt(from, { month: "long" })} (hasta hoy)` : key === "mes_anterior" ? fmt(from, { month: "long", year: "numeric" }) : rangeLabel(from, to);
   const prevLabel = key === "hoy" ? "ayer" : key === "mes" || key === "mes_anterior" ? `${fmt(prevFrom, { month: "long" })}${key === "mes" ? " (mismos días)" : ""}` : rangeLabel(prevFrom, prevTo);
-  return { key, from, to, prevFrom, prevTo, bucket: bucketFor(daysBetween(from, to)), label, prevLabel };
+  const days = daysBetween(from, to);
+  const allowed = allowedBuckets(days);
+  const bucket = allowed.includes(params.agrupar as Bucket) ? (params.agrupar as Bucket) : bucketFor(days);
+  return { key, from, to, prevFrom, prevTo, bucket, allowedBuckets: allowed, label, prevLabel };
 }
 
 /** % change, or null when there is no base to compare against (never a fake +100%). */
