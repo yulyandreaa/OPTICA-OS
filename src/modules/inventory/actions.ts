@@ -5,57 +5,127 @@ import { fail, fromError, fromZod, ok, type ActionResult } from "@/lib/action";
 import { createClient } from "@/lib/supabase/server";
 import { can } from "@/modules/authz/permissions";
 import { getAppContext } from "@/modules/tenants/services/context";
+import { variantLabel } from "./constants";
+import type { InventoryRow } from "./repositories";
+import { categorySchema, movementSchema, productSchema, transferSchema, type MovementInput, type ProductInput, type TransferInput } from "./schemas";
 
-const adjustSchema = z.object({
-  variantId: z.uuid(), branchId: z.uuid(), type: z.enum(["adjustment", "damage", "loss", "initial"]),
-  quantity: z.number().int().refine((n) => n !== 0, "La cantidad no puede ser cero").refine((n) => Math.abs(n) <= 999, "Cantidad muy alta"),
-  notes: z.string().trim().min(3, "Explica el motivo").max(300),
-});
+/**
+ * Every write goes through a database function that re-checks permissions, company and branch (RLS),
+ * runs in one transaction and, with an idempotency key, returns the first result on a retry.
+ */
 
-/** Stock never changes directly: this records an immutable movement (the DB updates the level). */
-export async function adjustStockAction(input: z.input<typeof adjustSchema>): Promise<ActionResult> {
-  const parsed = adjustSchema.safeParse(input);
+export async function saveProductAction(input: ProductInput): Promise<ActionResult<{ id: string }>> {
+  const parsed = productSchema.safeParse(input);
+  if (!parsed.success) return fromZod(parsed.error);
+  const ctx = await getAppContext();
+  if (!ctx || !can(ctx.grants, "inventory.manage")) return fail("No tienes permiso para gestionar productos.");
+  const v = parsed.data;
+  if (v.variants.some((x) => x.cost !== undefined) && !can(ctx.grants, "inventory.costs")) return fail("No tienes permiso para modificar costos.");
+  const db = await createClient();
+  const { data, error } = await db.rpc("save_product", { p: { ...v, tenant_id: ctx.tenant.id, initial_stock: v.id ? [] : v.initial_stock } });
+  if (error) return fromError("inventory.save_product", error);
+  revalidatePath("/inventario", "layout");
+  return ok({ id: data as string }, v.id ? "Producto actualizado" : "Producto creado");
+}
+
+export async function recordMovementAction(input: MovementInput): Promise<ActionResult<{ id: string | null }>> {
+  const parsed = movementSchema.safeParse(input);
   if (!parsed.success) return fromZod(parsed.error);
   const ctx = await getAppContext();
   const v = parsed.data;
-  if (!ctx || !can(ctx.grants, "inventory.adjust", v.branchId)) return fail("No tienes permiso para ajustar inventario en esta sede.");
+  if (!ctx || !can(ctx.grants, "inventory.adjust", v.branch_id)) return fail("No tienes permiso para registrar movimientos en esta sede.");
+  if (v.unit_cost !== undefined && !can(ctx.grants, "inventory.costs")) return fail("No tienes permiso para registrar costos.");
   const db = await createClient();
-  const { error } = await db.from("inventory_movements").insert({
-    tenant_id: ctx.tenant.id, branch_id: v.branchId, variant_id: v.variantId, type: v.type, quantity: v.quantity, notes: v.notes, created_by: ctx.user.id,
-  });
-  if (error) return fromError("inventory.adjust", error);
-  revalidatePath("/inventario");
-  return ok(undefined, "Movimiento registrado");
+  const { data, error } = await db.rpc("record_movement", { p: { ...v, tenant_id: ctx.tenant.id } });
+  if (error) return fromError("inventory.record_movement", error);
+  revalidatePath("/inventario", "layout");
+  return ok({ id: (data as string | null) ?? null }, data ? "Movimiento registrado" : "El conteo coincide con el sistema: no hubo diferencias");
 }
 
-const transferSchema = z.object({
-  fromBranchId: z.uuid(), toBranchId: z.uuid(), notes: z.string().max(300).optional(),
-  items: z.array(z.object({ variantId: z.uuid(), quantity: z.number().int().positive().max(999) })).min(1),
-}).refine((v) => v.fromBranchId !== v.toBranchId, { message: "Elige sedes distintas", path: ["toBranchId"] });
+export async function setMinStockAction(variantId: string, branchId: string, min: number): Promise<ActionResult> {
+  const parsed = z.object({ variantId: z.uuid(), branchId: z.uuid(), min: z.number().int().min(0).max(99_999) }).safeParse({ variantId, branchId, min });
+  if (!parsed.success) return fail("Escribe un número entero entre 0 y 99.999.");
+  const ctx = await getAppContext();
+  if (!ctx || !can(ctx.grants, "inventory.adjust", branchId)) return fail("No tienes permiso para cambiar el mínimo en esta sede.");
+  const db = await createClient();
+  const { error } = await db.rpc("set_min_stock", { p_tenant: ctx.tenant.id, p_branch: branchId, p_variant: variantId, p_min: min });
+  if (error) return fromError("inventory.set_min_stock", error);
+  revalidatePath("/inventario", "layout");
+  return ok(undefined, "Stock mínimo actualizado");
+}
 
-export async function requestTransferAction(input: z.input<typeof transferSchema>): Promise<ActionResult> {
+export async function createTransferAction(input: TransferInput): Promise<ActionResult<{ id: string }>> {
   const parsed = transferSchema.safeParse(input);
   if (!parsed.success) return fromZod(parsed.error);
   const ctx = await getAppContext();
-  if (!ctx || !can(ctx.grants, "inventory.transfer")) return fail("No tienes permiso para trasladar.");
   const v = parsed.data;
+  if (!ctx || !can(ctx.grants, "inventory.transfer", v.from_branch_id)) return fail("No tienes permiso para trasladar desde esa sede.");
   const db = await createClient();
-  const { data, error } = await db.from("inventory_transfers").insert({
-    tenant_id: ctx.tenant.id, number: "", from_branch_id: v.fromBranchId, to_branch_id: v.toBranchId, notes: v.notes ?? null, requested_by: ctx.user.id,
-  }).select("id").single();
-  if (error) return fromError("inventory.transfer", error);
-  const items = await db.from("inventory_transfer_items").insert(v.items.map((i) => ({ tenant_id: ctx.tenant.id, transfer_id: data.id, variant_id: i.variantId, quantity: i.quantity })));
-  if (items.error) return fromError("inventory.transfer_items", items.error);
-  revalidatePath("/inventario");
-  return ok(undefined, "Traslado solicitado");
+  const { data, error } = await db.rpc("create_transfer", { p: { ...v, tenant_id: ctx.tenant.id } });
+  if (error) return fromError("inventory.create_transfer", error);
+  revalidatePath("/inventario", "layout");
+  return ok({ id: data as string }, "Traslado enviado: las unidades quedan en tránsito hasta que la sede destino las reciba");
 }
 
-export async function advanceTransferAction(id: string, status: "approved" | "in_transit" | "received" | "cancelled"): Promise<ActionResult> {
+/** Transfers created before send → receive (status "Por enviar"): dispatch them now. */
+export async function sendTransferAction(id: string): Promise<ActionResult> {
   const ctx = await getAppContext();
-  if (!ctx || !can(ctx.grants, "inventory.transfer")) return fail("No tienes permiso.");
+  if (!ctx || !can(ctx.grants, "inventory.transfer")) return fail("No tienes permiso para enviar traslados.");
   const db = await createClient();
-  const { error } = await db.rpc("advance_transfer", { p_transfer: id, p_status: status });
-  if (error) return fromError("inventory.advance_transfer", error);
-  revalidatePath("/inventario");
-  return ok(undefined, { approved: "Traslado aprobado", in_transit: "Enviado: en tránsito", received: "Recibido: stock actualizado", cancelled: "Traslado cancelado" }[status]);
+  const { error } = await db.rpc("advance_transfer", { p_transfer: id, p_status: "in_transit" });
+  if (error) return fromError("inventory.send_transfer", error);
+  revalidatePath("/inventario", "layout");
+  return ok(undefined, "Traslado enviado: las unidades quedan en tránsito");
+}
+
+export async function receiveTransferAction(id: string): Promise<ActionResult> {
+  const ctx = await getAppContext();
+  if (!ctx || !can(ctx.grants, "inventory.transfer")) return fail("No tienes permiso para recibir traslados.");
+  const db = await createClient();
+  const { error } = await db.rpc("receive_transfer", { p_transfer: id });
+  if (error) return fromError("inventory.receive_transfer", error);
+  revalidatePath("/inventario", "layout");
+  return ok(undefined, "Traslado recibido: el stock de la sede destino se actualizó");
+}
+
+export async function cancelTransferAction(id: string, reason: string): Promise<ActionResult> {
+  const ctx = await getAppContext();
+  if (!ctx || !can(ctx.grants, "inventory.transfer")) return fail("No tienes permiso para cancelar traslados.");
+  if (reason.trim().length < 3) return fail("Explica por qué cancelas el traslado.");
+  const db = await createClient();
+  const { error } = await db.rpc("cancel_transfer", { p_transfer: id, p_reason: reason.trim().slice(0, 300) });
+  if (error) return fromError("inventory.cancel_transfer", error);
+  revalidatePath("/inventario", "layout");
+  return ok(undefined, "Traslado cancelado: las unidades volvieron a la sede de origen");
+}
+
+export async function createCategoryAction(input: z.input<typeof categorySchema>): Promise<ActionResult<{ id: string }>> {
+  const parsed = categorySchema.safeParse(input);
+  if (!parsed.success) return fromZod(parsed.error);
+  const ctx = await getAppContext();
+  if (!ctx || !can(ctx.grants, "inventory.manage")) return fail("No tienes permiso para crear categorías.");
+  const code = `c-${parsed.data.name.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30)}`;
+  const db = await createClient();
+  const { data, error } = await db.from("product_categories")
+    .insert({ tenant_id: ctx.tenant.id, code, name: parsed.data.name, kind: parsed.data.kind }).select("id").single();
+  if (error) return fromError("inventory.create_category", error);
+  revalidatePath("/inventario", "layout");
+  return ok({ id: data.id }, "Categoría creada");
+}
+
+export type VariantOption = { id: string; productId: string; label: string; sku: string; quantity: number; trackLots: boolean; unit: string };
+
+/** Picker for movement and transfer forms: stocked, active variants with their units in `branchId`. */
+export async function searchVariantsAction(query: string, branchId: string, variantId?: string): Promise<VariantOption[]> {
+  const ctx = await getAppContext();
+  if (!ctx || !can(ctx.grants, "inventory.read") || !z.uuid().safeParse(branchId).success) return [];
+  const db = await createClient();
+  const { data } = await db.rpc("inventory_list", { p_tenant: ctx.tenant.id, p_branch: branchId, p_query: query.trim().slice(0, 80) || undefined, p_limit: 20 });
+  return ((data ?? []) as unknown as InventoryRow[]).filter((r) => r.is_stocked && (!variantId || r.variant_id === variantId)).map((r) => {
+    const detail = variantLabel(r);
+    return {
+      id: r.variant_id, productId: r.product_id, sku: r.sku, quantity: Number(r.quantity ?? 0), trackLots: r.track_lots, unit: r.unit,
+      label: `${r.product_name}${detail ? ` · ${detail}` : ""}`,
+    };
+  });
 }

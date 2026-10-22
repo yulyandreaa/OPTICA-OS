@@ -70,6 +70,9 @@ export async function seedModules(db: Db, tenantId: string, users: Record<string
     for (const b of ["Nova Atelier", "Titanium Line", "Lumen Lab", "AquaSoft", "Clara"]) {
       brandIds[b] = (await q1<{ id: string }>(`insert into public.brands (tenant_id, name) values ($1, $2) returning id`, [tenantId, b])).id;
     }
+    // Costs live apart from the catalog (only inventory.costs can read them).
+    const setCost = (variantId: string, cost: number) =>
+      db.query(`insert into public.variant_costs (variant_id, tenant_id, avg_cost) values ($1, $2, $3)`, [variantId, tenantId, cost]);
     const frameVariants: { id: string; price: number; name: string }[] = [];
     for (const m of DEMO_CATALOG) {
       const pid = (await q1<{ id: string }>(
@@ -80,9 +83,10 @@ export async function seedModules(db: Db, tenantId: string, users: Record<string
           JSON.stringify({ shape: m.shape, material: m.material, lens: m.size.lens, bridge: m.size.bridge, temple: m.size.temple, tags: m.tags, showcase: true })])).id;
       for (const c of m.colors) {
         const v = await q1<{ id: string }>(
-          `insert into public.product_variants (tenant_id, product_id, sku, barcode, color_name, color_hex, image_url, stage_top, stage_bottom, price, cost)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id`,
-          [tenantId, pid, `${m.sku}-${c.key.toUpperCase().slice(0, 3)}`, `770${Math.floor(1e9 + rand() * 8e9)}`, c.name, c.swatch, c.image, c.stage[0], c.stage[1], m.price, Math.round(m.price * 0.38)]);
+          `insert into public.product_variants (tenant_id, product_id, sku, barcode, color_name, color_hex, image_url, stage_top, stage_bottom, price)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
+          [tenantId, pid, `${m.sku}-${c.key.toUpperCase().slice(0, 3)}`, `770${Math.floor(1e9 + rand() * 8e9)}`, c.name, c.swatch, c.image, c.stage[0], c.stage[1], m.price]);
+        await setCost(v.id, Math.round(m.price * 0.38));
         frameVariants.push({ id: v.id, price: m.price, name: `${m.name} ${c.name}` });
       }
     }
@@ -93,8 +97,9 @@ export async function seedModules(db: Db, tenantId: string, users: Record<string
           JSON.stringify({ shape: f.shape, material: f.material, lens: 50, bridge: 19, temple: 145 })])).id;
       for (const [color, hex] of f.colors) {
         const v = await q1<{ id: string }>(
-          `insert into public.product_variants (tenant_id, product_id, sku, barcode, color_name, color_hex, price, cost) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
-          [tenantId, pid, `NV-${f.name.slice(0, 3).toUpperCase()}-${color.slice(0, 3).toUpperCase()}${Math.floor(rand() * 90 + 10)}`, `770${Math.floor(1e9 + rand() * 8e9)}`, color, hex, f.price, Math.round(f.price * 0.4)]);
+          `insert into public.product_variants (tenant_id, product_id, sku, barcode, color_name, color_hex, price) values ($1,$2,$3,$4,$5,$6,$7) returning id`,
+          [tenantId, pid, `NV-${f.name.slice(0, 3).toUpperCase()}-${color.slice(0, 3).toUpperCase()}${Math.floor(rand() * 90 + 10)}`, `770${Math.floor(1e9 + rand() * 8e9)}`, color, hex, f.price]);
+        await setCost(v.id, Math.round(f.price * 0.4));
         frameVariants.push({ id: v.id, price: f.price, name: `${f.name} ${color}` });
       }
     }
@@ -102,7 +107,9 @@ export async function seedModules(db: Db, tenantId: string, users: Record<string
     const lensVariants: { id: string; price: number }[] = [];
     for (const l of LENSES) {
       const pid = (await q1<{ id: string }>(`insert into public.products (tenant_id, category_id, brand_id, name, is_stocked) values ($1, $2, $3, $4, false) returning id`, [tenantId, cat.get("ophthalmic_lenses"), brandIds["Lumen Lab"], l.name])).id;
-      lensVariants.push({ id: (await q1<{ id: string }>(`insert into public.product_variants (tenant_id, product_id, sku, price, cost) values ($1,$2,$3,$4,$5) returning id`, [tenantId, pid, `LEN-${lensVariants.length + 1}`, l.price, l.cost])).id, price: l.price });
+      const id = (await q1<{ id: string }>(`insert into public.product_variants (tenant_id, product_id, sku, price) values ($1,$2,$3,$4) returning id`, [tenantId, pid, `LEN-${lensVariants.length + 1}`, l.price])).id;
+      await setCost(id, l.cost);
+      lensVariants.push({ id, price: l.price });
     }
     const stockedExtras: { id: string; price: number }[] = [];
     for (const [code, name, price, brand] of [
@@ -111,7 +118,9 @@ export async function seedModules(db: Db, tenantId: string, users: Record<string
       ["accessories", "Paño de microfibra", 8000, "Clara"], ["accessories", "Spray limpiador 60 ml", 18000, "Clara"], ["accessories", "Cordón para gafas", 15000, "Clara"],
     ] as const) {
       const pid = (await q1<{ id: string }>(`insert into public.products (tenant_id, category_id, brand_id, name) values ($1, $2, $3, $4) returning id`, [tenantId, cat.get(code), brandIds[brand], name])).id;
-      stockedExtras.push({ id: (await q1<{ id: string }>(`insert into public.product_variants (tenant_id, product_id, sku, barcode, price, cost) values ($1,$2,$3,$4,$5,$6) returning id`, [tenantId, pid, `ACC-${stockedExtras.length + 1}`, `770${Math.floor(1e9 + rand() * 8e9)}`, price, Math.round(price * 0.45)])).id, price });
+      const id = (await q1<{ id: string }>(`insert into public.product_variants (tenant_id, product_id, sku, barcode, price) values ($1,$2,$3,$4,$5) returning id`, [tenantId, pid, `ACC-${stockedExtras.length + 1}`, `770${Math.floor(1e9 + rand() * 8e9)}`, price])).id;
+      await setCost(id, Math.round(price * 0.45));
+      stockedExtras.push({ id, price });
     }
     const consultPid = (await q1<{ id: string }>(`insert into public.products (tenant_id, category_id, name, is_stocked, tax_rate) values ($1, $2, 'Consulta de optometría', false, 0) returning id`, [tenantId, cat.get("services")])).id;
     const consultVariant = (await q1<{ id: string }>(`insert into public.product_variants (tenant_id, product_id, sku, price) values ($1, $2, 'SRV-CONSULTA', 60000) returning id`, [tenantId, consultPid])).id;

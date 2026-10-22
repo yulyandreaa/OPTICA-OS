@@ -7,7 +7,7 @@ import { DEMO_CATALOG } from "../catalog/demo-catalog";
 export function ShowcaseCard() {
   const hero = DEMO_CATALOG[0]!;
   return (
-    <Link href="/inventario" className="group relative block overflow-hidden rounded-xl border shadow-soft"
+    <Link href="/inventario/vitrina" className="group relative block overflow-hidden rounded-xl border shadow-soft"
       style={{ background: `linear-gradient(to bottom, ${hero.colors[0]!.stage[0]}, ${hero.colors[0]!.stage[1]})` }}>
       <div className="relative aspect-[16/9]">
         <Image src={hero.colors[0]!.image} alt={`Montura ${hero.name}`} fill sizes="(min-width: 1280px) 30vw, 90vw"

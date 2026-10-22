@@ -19,8 +19,9 @@ import { UniversalAction } from "./universal-action";
 
 export function Topbar() {
   const shell = useShell();
-  // The owner dashboard has its own branch selector in its header.
-  const ownDashboardSwitcher = usePathname() === "/inicio" && shell.can("reports.financial");
+  // The owner dashboard and the inventory list show the branch selector next to their own filters.
+  const pathname = usePathname();
+  const ownDashboardSwitcher = (pathname === "/inicio" && shell.can("reports.financial")) || pathname === "/inventario";
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (

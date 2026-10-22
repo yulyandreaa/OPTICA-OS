@@ -8,6 +8,7 @@ import { Controller, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { DatePicker } from "@/components/shared/date-picker";
 import { FormField } from "@/components/shared/form-field";
+import { FormSection } from "@/components/shared/form-section";
 import { NativeSelect } from "@/components/shared/native-select";
 import { SearchSelect } from "@/components/shared/search-select";
 import { Button } from "@/components/ui/button";
@@ -57,18 +58,6 @@ function usePersonMatches(values: { documentType: string; documentNumber: string
   return matches;
 }
 
-function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
-  return (
-    <section className="grid gap-6 border-b py-8 first:pt-0 last:border-0 md:grid-cols-[220px_1fr]">
-      <div className="space-y-1">
-        <h2 className="text-sm font-semibold">{title}</h2>
-        {description && <p className="text-sm text-muted-foreground">{description}</p>}
-      </div>
-      <div className="grid gap-4">{children}</div>
-    </section>
-  );
-}
-
 export function PatientForm({ patientId, defaults, branches }: {
   patientId?: string; defaults?: Partial<PatientFormInput>; branches: { id: string; name: string }[];
 }) {
@@ -114,7 +103,7 @@ export function PatientForm({ patientId, defaults, branches }: {
 
   return (
     <form onSubmit={onSubmit} noValidate autoComplete="off" className="rounded-2xl border bg-surface p-6 shadow-soft sm:p-8">
-      <Section title="Tipo de registro" description="Una persona tiene un solo registro, aunque compre y también reciba atención.">
+      <FormSection title="Tipo de registro" description="Una persona tiene un solo registro, aunque compre y también reciba atención.">
         <div role="radiogroup" aria-label="Tipo de registro" className="grid gap-3 sm:grid-cols-3">
           {(Object.keys(RELATIONS) as Relation[]).map((r) => {
             const Icon = RELATION_ICONS[r];
@@ -130,9 +119,9 @@ export function PatientForm({ patientId, defaults, branches }: {
           })}
         </div>
         {err("relation") && <p role="alert" className="text-sm text-destructive">{err("relation")}</p>}
-      </Section>
+      </FormSection>
 
-      <Section title="Identificación" description="El documento debe ser único en tu óptica.">
+      <FormSection title="Identificación" description="El documento debe ser único en tu óptica.">
         <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
           <FormField id="documentType" label="Tipo de documento">
             <NativeSelect id="documentType" {...reg("documentType")}>
@@ -185,9 +174,9 @@ export function PatientForm({ patientId, defaults, branches }: {
             </FormField>
           )}
         </div>
-      </Section>
+      </FormSection>
 
-      <Section title="Contacto" description="Opcional. Lo usaremos para confirmaciones y avisos de entrega.">
+      <FormSection title="Contacto" description="Opcional. Lo usaremos para confirmaciones y avisos de entrega.">
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField id="phone" label="Celular" error={err("phone")} optional><Input id="phone" {...NO_AUTOFILL} type="tel" placeholder="300 123 4567" {...reg("phone")} /></FormField>
           <FormField id="email" label="Correo" error={err("email")} optional><Input id="email" {...NO_AUTOFILL} type="email" {...reg("email")} /></FormField>
@@ -205,9 +194,9 @@ export function PatientForm({ patientId, defaults, branches }: {
             </NativeSelect>
           </FormField>
         </div>
-      </Section>
+      </FormSection>
 
-      <Section title="Ubicación y ocupación">
+      <FormSection title="Ubicación y ocupación">
         <FormField id="address" label="Dirección" optional><Input id="address" {...NO_AUTOFILL} {...reg("address")} /></FormField>
         <div className="grid gap-4 sm:grid-cols-3">
           <FormField id="department" label="Departamento" optional>
@@ -235,9 +224,9 @@ export function PatientForm({ patientId, defaults, branches }: {
             </NativeSelect>
           </FormField>
         )}
-      </Section>
+      </FormSection>
       {isPatient && (
-        <Section title="Aseguramiento" description="Datos administrativos para RIPS. Diagnósticos y fórmulas se registran en la consulta, no aquí.">
+        <FormSection title="Aseguramiento" description="Datos administrativos para RIPS. Diagnósticos y fórmulas se registran en la consulta, no aquí.">
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField id="eps" label="EPS" optional><Input id="eps" {...NO_AUTOFILL} {...reg("eps")} /></FormField>
             <FormField id="healthRegime" label="Régimen" optional>
@@ -247,12 +236,12 @@ export function PatientForm({ patientId, defaults, branches }: {
               </NativeSelect>
             </FormField>
           </div>
-        </Section>
+        </FormSection>
       )}
 
-      <Section title="Notas internas" description="Visibles para tu equipo. No escribas datos clínicos.">
+      <FormSection title="Notas internas" description="Visibles para tu equipo. No escribas datos clínicos.">
         <FormField id="notes" label="Notas" optional><Textarea id="notes" {...NO_AUTOFILL} rows={3} {...reg("notes")} /></FormField>
-      </Section>
+      </FormSection>
 
       {!patientId && (
         <div className="grid gap-3 rounded-lg bg-muted/60 p-4">

@@ -67,22 +67,37 @@ export function PurchaseStatusButtons({ id, status, canApprove }: { id: string; 
   );
 }
 
-export function ReceiveForm({ id, items }: { id: string; items: { id: string; label: string; pending: number }[] }) {
+/** Receiving is when stock grows. Products with lots ask for lot and expiry per line; a retry key avoids double receipts. */
+export function ReceiveForm({ id, items }: { id: string; items: { id: string; label: string; pending: number; trackLots: boolean }[] }) {
   const router = useRouter();
   const [qty, setQty] = useState<Record<string, number>>(Object.fromEntries(items.map((i) => [i.id, i.pending])));
+  const [lots, setLots] = useState<Record<string, { lot: string; expires: string }>>({});
+  const [key, setKey] = useState(() => crypto.randomUUID());
   const [pending, startTransition] = useTransition();
+  const missingLot = items.some((i) => i.trackLots && (qty[i.id] ?? 0) > 0 && !lots[i.id]?.lot.trim());
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-3">
       {items.filter((i) => i.pending > 0).map((i) => (
-        <div key={i.id} className="flex items-center gap-3 text-sm">
-          <span className="min-w-0 flex-1 truncate">{i.label} <span className="text-muted-foreground">· pendiente {i.pending}</span></span>
-          <Input aria-label={`Recibir ${i.label}`} type="number" min={0} max={i.pending} className="w-20" value={qty[i.id] ?? 0} onChange={(e) => setQty({ ...qty, [i.id]: Math.min(i.pending, Math.max(0, Number(e.target.value))) })} />
+        <div key={i.id} className="grid gap-2 text-sm">
+          <div className="flex items-center gap-3">
+            <span className="min-w-0 flex-1 truncate">{i.label} <span className="text-muted-foreground">· pendiente {i.pending}</span></span>
+            <Input aria-label={`Recibir ${i.label}`} type="number" min={0} max={i.pending} className="w-20" value={qty[i.id] ?? 0} onChange={(e) => setQty({ ...qty, [i.id]: Math.min(i.pending, Math.max(0, Number(e.target.value))) })} />
+          </div>
+          {i.trackLots && (qty[i.id] ?? 0) > 0 && (
+            <div className="grid grid-cols-2 gap-2">
+              <Input aria-label={`Lote de ${i.label}`} placeholder="Lote" className="h-8 font-mono uppercase" value={lots[i.id]?.lot ?? ""}
+                onChange={(e) => setLots({ ...lots, [i.id]: { lot: e.target.value, expires: lots[i.id]?.expires ?? "" } })} />
+              <Input aria-label={`Vencimiento de ${i.label}`} type="date" className="h-8" value={lots[i.id]?.expires ?? ""}
+                onChange={(e) => setLots({ ...lots, [i.id]: { lot: lots[i.id]?.lot ?? "", expires: e.target.value } })} />
+            </div>
+          )}
         </div>
       ))}
-      <Button className="mt-2 justify-self-start" disabled={pending} onClick={() => startTransition(async () => {
-        const res = await receivePurchaseAction(id, Object.entries(qty).map(([itemId, quantity]) => ({ itemId, quantity })));
-        if (!res.ok) { toast.error(res.error); return; }
-        toast.success(res.message); router.refresh();
+      {missingLot && <p className="text-xs text-muted-foreground">Indica el lote de los productos que lo manejan.</p>}
+      <Button className="mt-1 justify-self-start" disabled={pending || missingLot} onClick={() => startTransition(async () => {
+        const res = await receivePurchaseAction(id, Object.entries(qty).map(([itemId, quantity]) => ({ itemId, quantity, lotCode: lots[itemId]?.lot.trim(), expiresOn: lots[itemId]?.expires })), key);
+        if (!res.ok) { toast.error(res.error); setKey(crypto.randomUUID()); return; }
+        toast.success(res.message); setKey(crypto.randomUUID()); router.refresh();
       })}>{pending ? <Loader2 className="animate-spin" /> : <PackageCheck />} Registrar recepción</Button>
     </div>
   );

@@ -35,7 +35,8 @@ describe("dashboard del administrador", () => {
 
     const cat = (await db.query<{ id: string }>(`select id from public.product_categories where tenant_id = $1 and code = 'frames'`, [tenant])).rows[0]!.id;
     const prod = (await one<{ id: string }>(owner, `insert into public.products (tenant_id, category_id, name) values ($1, $2, 'Montura') returning id`, [tenant, cat])).id;
-    const frame = (await one<{ id: string }>(owner, `insert into public.product_variants (tenant_id, product_id, sku, price, cost) values ($1, $2, 'M-1', 119000, 40000) returning id`, [tenant, prod])).id;
+    const frame = (await one<{ id: string }>(owner, `insert into public.product_variants (tenant_id, product_id, sku, price) values ($1, $2, 'M-1', 119000) returning id`, [tenant, prod])).id;
+    await one(owner, `insert into public.variant_costs (tenant_id, variant_id, avg_cost) values ($1, $2, 40000) returning variant_id`, [tenant, frame]);
     await one(owner, `insert into public.inventory_movements (tenant_id, branch_id, variant_id, type, quantity) values ($1, $2, $3, 'initial', 3) returning id`, [tenant, main, frame]);
 
     const sale = (branch: string, items: unknown[], payments: unknown[]) =>

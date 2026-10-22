@@ -221,11 +221,11 @@ function AlertCards({ s }: { s: DashboardSummary }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <AlertCard icon={Package} tone="red" title="Inventario bajo" subtitle="Productos en o por debajo del mínimo" count={stockCount}
-        href={a.out_of_stock > 0 ? "/inventario?tab=stock&filtro=agotado" : "/inventario?tab=stock&filtro=bajo"} cta="Ver inventario">
+        href={a.out_of_stock > 0 ? "/inventario?disponibilidad=out" : "/inventario?disponibilidad=low"} cta="Ver inventario">
         {stockCount === 0 ? <AllGood>Stock al día.</AllGood> : (
           <Rows rows={[
             ...a.low_stock_by_category.slice(0, 3).map((c) => ({ key: c.category, left: c.category, right: `${c.count}` })),
-            ...(a.out_of_stock > 0 ? [{ key: "agotados", left: <span className="text-destructive">Agotados</span>, right: <span className="text-destructive">{a.out_of_stock}</span>, href: "/inventario?tab=stock&filtro=agotado" }] : []),
+            ...(a.out_of_stock > 0 ? [{ key: "agotados", left: <span className="text-destructive">Agotados</span>, right: <span className="text-destructive">{a.out_of_stock}</span>, href: "/inventario?disponibilidad=out" }] : []),
           ]} />
         )}
       </AlertCard>

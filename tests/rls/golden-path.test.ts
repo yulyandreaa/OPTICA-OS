@@ -73,9 +73,11 @@ describe("golden path", () => {
     const cat = (await db.query<{ id: string }>(`select id from public.product_categories where tenant_id = $1 and code = 'frames'`, [tenant])).rows[0]!.id;
     const svc = (await db.query<{ id: string }>(`select id from public.product_categories where tenant_id = $1 and code = 'ophthalmic_lenses'`, [tenant])).rows[0]!.id;
     const prod = (await one<{ id: string }>(owner, `insert into public.products (tenant_id, category_id, name) values ($1, $2, 'Aurora') returning id`, [tenant, cat])).id;
-    frameVariant = (await one<{ id: string }>(owner, `insert into public.product_variants (tenant_id, product_id, sku, color_name, price, cost) values ($1, $2, 'AUR-AZ', 'Azul', 485000, 190000) returning id`, [tenant, prod])).id;
+    frameVariant = (await one<{ id: string }>(owner, `insert into public.product_variants (tenant_id, product_id, sku, color_name, price) values ($1, $2, 'AUR-AZ', 'Azul', 485000) returning id`, [tenant, prod])).id;
+    await one(owner, `insert into public.variant_costs (tenant_id, variant_id, avg_cost) values ($1, $2, 190000) returning variant_id`, [tenant, frameVariant]);
     const lens = (await one<{ id: string }>(owner, `insert into public.products (tenant_id, category_id, name, is_stocked) values ($1, $2, 'Lente monofocal policarbonato AR', false) returning id`, [tenant, svc])).id;
-    lensVariant = (await one<{ id: string }>(owner, `insert into public.product_variants (tenant_id, product_id, sku, price, cost) values ($1, $2, 'LEN-MONO-PC', 380000, 120000) returning id`, [tenant, lens])).id;
+    lensVariant = (await one<{ id: string }>(owner, `insert into public.product_variants (tenant_id, product_id, sku, price) values ($1, $2, 'LEN-MONO-PC', 380000) returning id`, [tenant, lens])).id;
+    await one(owner, `insert into public.variant_costs (tenant_id, variant_id, avg_cost) values ($1, $2, 120000) returning variant_id`, [tenant, lensVariant]);
     await one(owner, `insert into public.inventory_movements (tenant_id, branch_id, variant_id, type, quantity) values ($1, $2, $3, 'initial', 3) returning id`, [tenant, branch, frameVariant]);
     expect(await expectDenied(db, owner, `update public.inventory_levels set quantity = 99 where variant_id = $1`, [frameVariant])).toMatch(/STOCK_DIRECT_EDIT_FORBIDDEN/);
     const deleted = await asUser(db, owner, async () => (await db.query(`delete from public.inventory_movements where variant_id = $1`, [frameVariant])).rowCount);

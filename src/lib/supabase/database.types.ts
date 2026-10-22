@@ -431,6 +431,46 @@ export type Database = {
           { foreignKeyName: "inventory_levels_variant_id_tenant_id_fkey"; columns: ["variant_id","tenant_id"]; isOneToOne: false; referencedRelation: "product_variants"; referencedColumns: ["id","tenant_id"] }
         ]
       }
+      inventory_lots: {
+        Row: {
+          id: string
+          tenant_id: string
+          branch_id: string
+          variant_id: string
+          lot_code: string
+          expires_on: string | null
+          quantity: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          branch_id: string
+          variant_id: string
+          lot_code: string
+          expires_on?: string | null
+          quantity?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          branch_id?: string
+          variant_id?: string
+          lot_code?: string
+          expires_on?: string | null
+          quantity?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "inventory_lots_branch_id_tenant_id_fkey"; columns: ["branch_id","tenant_id"]; isOneToOne: false; referencedRelation: "branches"; referencedColumns: ["id","tenant_id"] },
+          { foreignKeyName: "inventory_lots_tenant_id_fkey"; columns: ["tenant_id"]; isOneToOne: false; referencedRelation: "tenants"; referencedColumns: ["id"] },
+          { foreignKeyName: "inventory_lots_variant_id_tenant_id_fkey"; columns: ["variant_id","tenant_id"]; isOneToOne: false; referencedRelation: "product_variants"; referencedColumns: ["id","tenant_id"] }
+        ]
+      }
       inventory_movements: {
         Row: {
           id: string
@@ -445,6 +485,10 @@ export type Database = {
           notes: string | null
           created_by: string | null
           created_at: string
+          lot_code: string | null
+          expires_on: string | null
+          lot_allocations: Json
+          idempotency_key: string | null
         }
         Insert: {
           id?: string
@@ -459,6 +503,10 @@ export type Database = {
           notes?: string | null
           created_by?: string | null
           created_at?: string
+          lot_code?: string | null
+          expires_on?: string | null
+          lot_allocations?: Json
+          idempotency_key?: string | null
         }
         Update: {
           id?: string
@@ -473,6 +521,10 @@ export type Database = {
           notes?: string | null
           created_by?: string | null
           created_at?: string
+          lot_code?: string | null
+          expires_on?: string | null
+          lot_allocations?: Json
+          idempotency_key?: string | null
         }
         Relationships: [
           { foreignKeyName: "inventory_movements_branch_id_tenant_id_fkey"; columns: ["branch_id","tenant_id"]; isOneToOne: false; referencedRelation: "branches"; referencedColumns: ["id","tenant_id"] },
@@ -521,6 +573,14 @@ export type Database = {
           requested_by: string | null
           created_at: string
           updated_at: string
+          idempotency_key: string | null
+          sent_at: string | null
+          sent_by: string | null
+          received_at: string | null
+          received_by: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          cancel_reason: string | null
         }
         Insert: {
           id?: string
@@ -533,6 +593,14 @@ export type Database = {
           requested_by?: string | null
           created_at?: string
           updated_at?: string
+          idempotency_key?: string | null
+          sent_at?: string | null
+          sent_by?: string | null
+          received_at?: string | null
+          received_by?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          cancel_reason?: string | null
         }
         Update: {
           id?: string
@@ -545,10 +613,21 @@ export type Database = {
           requested_by?: string | null
           created_at?: string
           updated_at?: string
+          idempotency_key?: string | null
+          sent_at?: string | null
+          sent_by?: string | null
+          received_at?: string | null
+          received_by?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          cancel_reason?: string | null
         }
         Relationships: [
+          { foreignKeyName: "inventory_transfers_cancelled_by_fkey"; columns: ["cancelled_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
           { foreignKeyName: "inventory_transfers_from_branch_id_tenant_id_fkey"; columns: ["from_branch_id","tenant_id"]; isOneToOne: false; referencedRelation: "branches"; referencedColumns: ["id","tenant_id"] },
+          { foreignKeyName: "inventory_transfers_received_by_fkey"; columns: ["received_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
           { foreignKeyName: "inventory_transfers_requested_by_fkey"; columns: ["requested_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "inventory_transfers_sent_by_fkey"; columns: ["sent_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
           { foreignKeyName: "inventory_transfers_tenant_id_fkey"; columns: ["tenant_id"]; isOneToOne: false; referencedRelation: "tenants"; referencedColumns: ["id"] },
           { foreignKeyName: "inventory_transfers_to_branch_id_tenant_id_fkey"; columns: ["to_branch_id","tenant_id"]; isOneToOne: false; referencedRelation: "branches"; referencedColumns: ["id","tenant_id"] }
         ]
@@ -1548,18 +1627,30 @@ export type Database = {
           tenant_id: string
           code: string
           name: string
+          kind: string
+          is_active: boolean
+          sort_order: number
+          created_at: string
         }
         Insert: {
           id?: string
           tenant_id: string
           code: string
           name: string
+          kind: string
+          is_active?: boolean
+          sort_order?: number
+          created_at?: string
         }
         Update: {
           id?: string
           tenant_id?: string
           code?: string
           name?: string
+          kind?: string
+          is_active?: boolean
+          sort_order?: number
+          created_at?: string
         }
         Relationships: [
           { foreignKeyName: "product_categories_tenant_id_fkey"; columns: ["tenant_id"]; isOneToOne: false; referencedRelation: "tenants"; referencedColumns: ["id"] }
@@ -1577,10 +1668,11 @@ export type Database = {
           image_url: string | null
           stage_top: string | null
           stage_bottom: string | null
-          cost: number
           price: number
           is_active: boolean
           created_at: string
+          attributes: Json
+          updated_at: string
         }
         Insert: {
           id?: string
@@ -1593,10 +1685,11 @@ export type Database = {
           image_url?: string | null
           stage_top?: string | null
           stage_bottom?: string | null
-          cost?: number
           price: number
           is_active?: boolean
           created_at?: string
+          attributes?: Json
+          updated_at?: string
         }
         Update: {
           id?: string
@@ -1609,10 +1702,11 @@ export type Database = {
           image_url?: string | null
           stage_top?: string | null
           stage_bottom?: string | null
-          cost?: number
           price?: number
           is_active?: boolean
           created_at?: string
+          attributes?: Json
+          updated_at?: string
         }
         Relationships: [
           { foreignKeyName: "product_variants_product_id_tenant_id_fkey"; columns: ["product_id","tenant_id"]; isOneToOne: false; referencedRelation: "products"; referencedColumns: ["id","tenant_id"] },
@@ -1635,6 +1729,10 @@ export type Database = {
           is_active: boolean
           created_at: string
           updated_at: string
+          unit: string
+          default_min_stock: number
+          track_lots: boolean
+          idempotency_key: string | null
         }
         Insert: {
           id?: string
@@ -1651,6 +1749,10 @@ export type Database = {
           is_active?: boolean
           created_at?: string
           updated_at?: string
+          unit?: string
+          default_min_stock?: number
+          track_lots?: boolean
+          idempotency_key?: string | null
         }
         Update: {
           id?: string
@@ -1667,6 +1769,10 @@ export type Database = {
           is_active?: boolean
           created_at?: string
           updated_at?: string
+          unit?: string
+          default_min_stock?: number
+          track_lots?: boolean
+          idempotency_key?: string | null
         }
         Relationships: [
           { foreignKeyName: "products_brand_id_tenant_id_fkey"; columns: ["brand_id","tenant_id"]; isOneToOne: false; referencedRelation: "brands"; referencedColumns: ["id","tenant_id"] },
@@ -2618,6 +2724,37 @@ export type Database = {
           { foreignKeyName: "user_roles_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] }
         ]
       }
+      variant_costs: {
+        Row: {
+          variant_id: string
+          tenant_id: string
+          avg_cost: number
+          last_cost: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          variant_id: string
+          tenant_id: string
+          avg_cost?: number
+          last_cost?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          variant_id?: string
+          tenant_id?: string
+          avg_cost?: number
+          last_cost?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          { foreignKeyName: "variant_costs_tenant_id_fkey"; columns: ["tenant_id"]; isOneToOne: false; referencedRelation: "tenants"; referencedColumns: ["id"] },
+          { foreignKeyName: "variant_costs_updated_by_fkey"; columns: ["updated_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "variant_costs_variant_id_tenant_id_fkey"; columns: ["variant_id","tenant_id"]; isOneToOne: false; referencedRelation: "product_variants"; referencedColumns: ["id","tenant_id"] }
+        ]
+      }
       webhook_events: {
         Row: {
           id: string
@@ -2661,22 +2798,32 @@ export type Database = {
       booking_catalog: { Args: { p_slug: string }; Returns: Json }
       booking_create: { Args: { p_slug: string; p_branch: string; p_type: string; p_specialist: string; p_starts_at: string; p_document_type: string; p_document_number: string; p_first_name: string; p_last_name: string; p_phone: string; p_email: string; p_accept_data_policy: boolean; p_policy_version: string }; Returns: Json }
       booking_slots: { Args: { p_slug: string; p_branch: string; p_type: string; p_date: string; p_specialist?: string }; Returns: { specialist_id: string | null; starts_at: string | null }[] }
+      cancel_transfer: { Args: { p_transfer: string; p_reason?: string }; Returns: string }
       convert_quote: { Args: { p_quote: string; p_payments: Json; p_idempotency_key?: string }; Returns: string }
       create_quote: { Args: { p: Json }; Returns: string }
       create_sale: { Args: { p: Json }; Returns: string }
       create_tenant: { Args: { p_trade_name: string; p_legal_name: string; p_slug: string; p_tax_id_type: string; p_tax_id: string; p_tax_dv: string; p_tax_regime: string; p_specialty: string; p_branch_name: string; p_branch_city: string; p_branch_address: string; p_branch_phone: string }; Returns: string }
+      create_transfer: { Args: { p: Json }; Returns: string }
       dashboard_metrics: { Args: { p_tenant: string; p_branch?: string }; Returns: Json }
       dashboard_summary: { Args: { p_tenant: string; p_from: string; p_to: string; p_prev_from: string; p_prev_to: string; p_branch?: string; p_bucket?: string }; Returns: Json }
       find_person_matches: { Args: { p_tenant: string; p_document_type: string; p_document_number: string; p_first_name: string; p_last_name: string; p_birth_date?: string; p_phone?: string; p_email?: string; p_exclude?: string }; Returns: { id: string | null; full_name: string | null; document_type: string | null; document_number: string | null; phone: string | null; email: string | null; is_active: boolean | null; reasons: string[] | null }[] }
+      inventory_list: { Args: { p_tenant: string; p_branch?: string; p_query?: string; p_category?: string; p_brand?: string; p_status?: string; p_availability?: string; p_limit?: number; p_offset?: number }; Returns: { variant_id: string | null; product_id: string | null; product_name: string | null; model: string | null; brand: string | null; category: string | null; category_kind: string | null; sku: string | null; barcode: string | null; color_name: string | null; color_hex: string | null; attributes: Json | null; image_url: string | null; unit: string | null; is_stocked: boolean | null; track_lots: boolean | null; price: number | null; cost: number | null; quantity: number | null; min_quantity: number | null; in_transit: number | null; branches: Json | null; stock_status: string | null; is_active: boolean | null; next_expiry: string | null; total_count: number | null }[] }
+      inventory_movement_history: { Args: { p_tenant: string; p_branch?: string; p_product?: string; p_variant?: string; p_type?: string; p_before?: string; p_before_id?: string; p_limit?: number }; Returns: { id: string | null; created_at: string | null; type: string | null; quantity: number | null; unit_cost: number | null; branch_id: string | null; branch_name: string | null; variant_id: string | null; sku: string | null; product_id: string | null; product_name: string | null; color_name: string | null; variant_attributes: Json | null; lot_code: string | null; expires_on: string | null; lot_allocations: Json | null; notes: string | null; reference_type: string | null; reference_id: string | null; reference_label: string | null; author_name: string | null }[] }
       inventory_overview: { Args: { p_tenant: string; p_branch?: string; p_query?: string }; Returns: { variant_id: string | null; product_id: string | null; product_name: string | null; category: string | null; brand: string | null; sku: string | null; color_name: string | null; color_hex: string | null; image_url: string | null; price: number | null; cost: number | null; quantity: number | null; min_quantity: number | null; is_low: boolean | null }[] }
+      inventory_stock: { Args: { p_tenant: string; p_branch?: string }; Returns: { variant_id: string | null; quantity: number | null; min_quantity: number | null; in_transit: number | null; branches: Json | null }[] }
+      inventory_summary: { Args: { p_tenant: string; p_branch?: string }; Returns: Json }
       invitation_preview: { Args: { p_token_hash: string }; Returns: Json }
       my_permissions: { Args: { p_tenant: string }; Returns: { permission_code: string | null; branch_id: string | null }[] }
       people_summary: { Args: { p_tenant: string }; Returns: Json }
       public_quote: { Args: { p_token: string }; Returns: Json }
       recall_opportunities: { Args: { p_tenant: string; p_limit?: number }; Returns: { patient_id: string | null; full_name: string | null; phone: string | null; last_visit: string | null; months_since: number | null }[] }
       recall_opportunities_count: { Args: { p_tenant: string }; Returns: number }
-      receive_purchase_order: { Args: { p_order: string; p_items: Json }; Returns: string }
+      receive_purchase_order: { Args: { p_order: string; p_items: Json; p_key?: string }; Returns: string }
+      receive_transfer: { Args: { p_transfer: string }; Returns: string }
+      record_movement: { Args: { p: Json }; Returns: string }
       report_sales: { Args: { p_tenant: string; p_from: string; p_to: string; p_branch?: string }; Returns: Json }
+      save_product: { Args: { p: Json }; Returns: string }
+      set_min_stock: { Args: { p_tenant: string; p_branch: string; p_variant: string; p_min: number }; Returns: undefined }
       sign_medical_record: { Args: { p_record: string }; Returns: Json }
       slug_available: { Args: { p_slug: string }; Returns: boolean }
       track_lab_order: { Args: { p_token: string }; Returns: Json }

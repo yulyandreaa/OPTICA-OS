@@ -17,6 +17,7 @@ export function PatientSearch({ placeholder = "Nombre, documento o celular", lab
       const next = new URLSearchParams(params);
       if (value) next.set("q", value); else next.delete("q");
       next.delete("cursor");
+      next.delete("pagina");
       startTransition(() => router.replace(`${pathname}?${next.toString()}`));
     }, 250);
     return () => clearTimeout(t);

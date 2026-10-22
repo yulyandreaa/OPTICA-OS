@@ -19,7 +19,7 @@ export default async function PurchasePage(props: PageProps<"/compras/[id]">) {
   const db = await createClient();
   const [{ data: po }, { data: items }] = await Promise.all([
     db.from("purchase_orders").select("*, supplier:suppliers(name, contact_name, phone, email), branch:branches(name)").eq("tenant_id", ctx.tenant.id).eq("id", id).maybeSingle(),
-    db.from("purchase_order_items").select("id, quantity, received_quantity, unit_cost, variant:product_variants(sku, color_name, product:products(name))").eq("tenant_id", ctx.tenant.id).eq("purchase_order_id", id),
+    db.from("purchase_order_items").select("id, quantity, received_quantity, unit_cost, variant:product_variants(sku, color_name, product:products(name, track_lots))").eq("tenant_id", ctx.tenant.id).eq("purchase_order_id", id),
   ]);
   if (!po) notFound();
   const receivable = ["sent", "approved", "partially_received"].includes(po.status) && can(ctx.grants, "purchases.approve");
@@ -41,7 +41,7 @@ export default async function PurchasePage(props: PageProps<"/compras/[id]">) {
           <div className="flex justify-between border-t px-4 py-3 font-semibold"><span>Total</span><span className="tabular">{formatMoney(po.total)}</span></div>
         </Panel>
         <Panel title="Recepción">
-          {receivable ? <ReceiveForm id={po.id} items={(items ?? []).map((i) => ({ id: i.id, label: `${i.variant?.product?.name} ${i.variant?.color_name ?? ""}`, pending: Number(i.quantity) - Number(i.received_quantity) }))} />
+          {receivable ? <ReceiveForm id={po.id} items={(items ?? []).map((i) => ({ id: i.id, label: `${i.variant?.product?.name} ${i.variant?.color_name ?? ""}`, pending: Number(i.quantity) - Number(i.received_quantity), trackLots: !!i.variant?.product?.track_lots }))} />
             : <p className="text-sm text-muted-foreground">{po.status === "received" ? "Mercancía recibida completa. El stock ya está actualizado." : po.status === "draft" ? "Envía la orden al proveedor para poder recibirla." : "Sin acciones disponibles."}</p>}
         </Panel>
       </div>

@@ -38,6 +38,8 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/inventario", label: "Inventario", icon: Package, permission: "inventory.read",
         children: [
           { href: "/inventario", label: "Productos y stock", permission: "inventory.read" },
+          { href: "/inventario/movimientos", label: "Movimientos", permission: "inventory.read" },
+          { href: "/inventario/traslados", label: "Traslados", permission: "inventory.read" },
           { href: "/compras", label: "Compras y proveedores", permission: "purchases.read" },
         ],
       },

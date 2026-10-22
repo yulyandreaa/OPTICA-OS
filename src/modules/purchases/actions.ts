@@ -43,11 +43,14 @@ export async function setPurchaseStatusAction(id: string, status: "sent" | "appr
   return ok(undefined, { sent: "Orden enviada al proveedor", approved: "Orden aprobada", cancelled: "Orden cancelada" }[status]);
 }
 
-export async function receivePurchaseAction(id: string, items: { itemId: string; quantity: number }[]): Promise<ActionResult<{ status: string }>> {
+export async function receivePurchaseAction(id: string, items: { itemId: string; quantity: number; lotCode?: string; expiresOn?: string }[], key?: string): Promise<ActionResult<{ status: string }>> {
   const ctx = await getAppContext();
   if (!ctx || !can(ctx.grants, "purchases.approve")) return fail("No tienes permiso para recibir mercancía.");
   const db = await createClient();
-  const { data, error } = await db.rpc("receive_purchase_order", { p_order: id, p_items: items.filter((i) => i.quantity > 0).map((i) => ({ item_id: i.itemId, quantity: i.quantity })) });
+  const { data, error } = await db.rpc("receive_purchase_order", {
+    p_order: id, p_key: key?.slice(0, 80),
+    p_items: items.filter((i) => i.quantity > 0).map((i) => ({ item_id: i.itemId, quantity: i.quantity, lot_code: i.lotCode || null, expires_on: i.expiresOn || null })),
+  });
   if (error) return fromError("purchases.receive", error);
   revalidatePath(`/compras/${id}`);
   revalidatePath("/inventario");

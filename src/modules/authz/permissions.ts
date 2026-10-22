@@ -5,7 +5,7 @@ export const PERMISSIONS = [
   "appointments.read", "appointments.create", "appointments.update", "appointments.cancel", "schedules.manage",
   "medical_records.read", "medical_records.create", "medical_records.sign", "medical_records.amend",
   "prescriptions.read", "prescriptions.create",
-  "inventory.read", "inventory.manage", "inventory.adjust", "inventory.transfer",
+  "inventory.read", "inventory.manage", "inventory.adjust", "inventory.transfer", "inventory.costs",
   "suppliers.read", "suppliers.manage", "purchases.read", "purchases.create", "purchases.approve",
   "sales.read", "sales.create", "sales.discount", "sales.refund", "pos.use", "cash.manage",
   "quotes.read", "quotes.create",

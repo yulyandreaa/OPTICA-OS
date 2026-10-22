@@ -83,7 +83,7 @@ export default async function HomePage(props: PageProps<"/inicio">) {
     { show: canAppts && metrics.waiting_now > 0, icon: Sofa, text: <><b>{metrics.waiting_now}</b> en sala de espera</>, href: "/agenda/sala-espera" },
     { show: canAppts && metrics.unconfirmed_tomorrow > 0, icon: CalendarCheck2, text: <><b>{metrics.unconfirmed_tomorrow}</b> sin confirmar para mañana</>, href: `/agenda?date=${addDaysKey(today, 1)}` },
     { show: readyOrders.length > 0, icon: FlaskConical, text: <><b>{readyOrders.length}</b> {readyOrders.length === 1 ? "orden lista" : "órdenes listas"} para entregar</>, href: "/ordenes" },
-    { show: lowStock.length > 0, icon: Boxes, text: <><b>{lowStock.length}</b> productos con stock bajo</>, href: "/inventario?tab=stock" },
+    { show: lowStock.length > 0, icon: Boxes, text: <><b>{lowStock.length}</b> productos con stock bajo</>, href: "/inventario?disponibilidad=low" },
     { show: !!salesMonth && Number(salesMonth.balance_pending) > 0, icon: ShoppingBag, text: <><b>{formatCompactMoney(Number(salesMonth?.balance_pending ?? 0))}</b> por cobrar</>, href: "/ventas?estado=partial" },
     { show: recall.total > 0, icon: UserPlus, text: <><b>{recall.total}</b> oportunidades de control</>, href: "#oportunidades" },
   ].filter((i) => i.show);
@@ -175,7 +175,7 @@ export default async function HomePage(props: PageProps<"/inicio">) {
               { label: "Invitar a tu equipo", done: (setup[0].count ?? 0) > 1, href: "/equipo" },
               { label: "Configurar horarios de agenda", done: (setup[1].count ?? 0) > 0, href: "/configuracion/agenda" },
               { label: "Recibir la primera reserva en línea", done: metrics.online_bookings_month > 0, href: `/book/${ctx.tenant.slug}` },
-              { label: "Cargar inventario de monturas", done: (setup[2].count ?? 0) > 0, href: "/inventario?tab=stock" },
+              { label: "Cargar inventario de monturas", done: (setup[2].count ?? 0) > 0, href: "/inventario" },
               { label: "Conectar WhatsApp", done: false, href: "/configuracion/integraciones", soon: true },
               { label: "Emitir la primera factura electrónica", done: (setup[3].count ?? 0) > 0, href: "/facturacion" },
             ]} />
@@ -194,7 +194,7 @@ export default async function HomePage(props: PageProps<"/inicio">) {
             </Panel>
           )}
           {lowStock.length > 0 && (
-            <Panel title="Stock bajo" bodyClassName="p-0" action={<Link href="/inventario?tab=stock" className="text-xs text-muted-foreground hover:text-foreground">Inventario</Link>}>
+            <Panel title="Stock bajo" bodyClassName="p-0" action={<Link href="/inventario" className="text-xs text-muted-foreground hover:text-foreground">Inventario</Link>}>
               <ul className="divide-y">{lowStock.map((p) => (
                 <li key={p.variant_id} className="flex items-center justify-between px-4 py-2.5 text-sm">
                   <span className="truncate">{p.product_name} {p.color_name ?? ""}</span><span className="font-medium text-destructive tabular">{Number(p.quantity)} u.</span>
