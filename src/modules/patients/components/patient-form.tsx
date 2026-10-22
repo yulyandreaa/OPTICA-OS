@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DEPARTMENTS, municipalitiesOf } from "@/lib/divipola";
+import { formatAge } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { createPatientAction, findPersonMatchesAction, updatePatientAction, type PersonMatch } from "../actions";
 import {
@@ -82,6 +83,7 @@ export function PatientForm({ patientId, defaults, branches }: {
   const matches = usePersonMatches({ documentType, documentNumber, firstName, lastName, birthDate, phone: phoneValue, email: emailValue }, patientId);
   const sameDocument = matches.find((m) => m.reasons.includes("document"));
   const isPatient = relation !== "customer";
+  const age = /^\d{4}-\d{2}-\d{2}$/.test(birthDate ?? "") ? formatAge(birthDate) : null;
   const err = (k: keyof PatientFormInput) => errors[k]?.message as string | undefined;
   const cityOptions = useMemo(() => municipalitiesOf(department).map((m) => ({ value: m.name, label: m.name })), [department]);
 
@@ -163,9 +165,10 @@ export function PatientForm({ patientId, defaults, branches }: {
           </div>
         )}
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField id="birthDate" label="Fecha de nacimiento" error={err("birthDate")} optional={!isPatient} hint={isPatient ? undefined : "Opcional para clientes."}>
+          <FormField id="birthDate" label="Fecha de nacimiento" error={err("birthDate")} optional={!isPatient}
+            hint={age ? `Edad: ${age}` : isPatient ? "Escríbela como dd/mm/aaaa o elígela en el calendario." : "Opcional para clientes."}>
             <Controller control={form.control} name="birthDate" render={({ field }) => (
-              <DatePicker id="birthDate" value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.birthDate} />
+              <DatePicker typeable id="birthDate" value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.birthDate} />
             )} />
           </FormField>
           {isPatient && (

@@ -10,7 +10,7 @@ import { Panel } from "@/components/shared/panel";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { buttonVariants } from "@/components/ui/button";
-import { ageFrom, formatDate, formatTime, initials } from "@/lib/format";
+import { formatAge, formatDate, formatTime, initials } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 import { nowMs } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -79,7 +79,7 @@ export default async function PatientPage(props: PageProps<"/pacientes/[id]">) {
   const now = await nowMs();
   const upcoming = appointments.filter((a) => new Date(a.starts_at).getTime() >= now && !["cancelled", "no_show"].includes(a.status)).reverse();
   const lastVisit = appointments.find((a) => a.status === "completed");
-  const age = ageFrom(patient.birth_date);
+  const age = formatAge(patient.birth_date);
   const tz = ctx.timezone;
   const whatsapp = patient.whatsapp ?? patient.phone;
   const tabHref = (key: string) => (key === "resumen" ? `/pacientes/${id}` : `/pacientes/${id}?tab=${key}`);
@@ -98,7 +98,7 @@ export default async function PatientPage(props: PageProps<"/pacientes/[id]">) {
               {!patient.is_active && <StatusBadge tone="neutral">Inactivo</StatusBadge>}
             </div>
             <p className="text-sm text-muted-foreground tabular">
-              {patient.document_type} {patient.document_number}{age !== null && ` · ${age} años`}{patient.home_branch && ` · ${patient.home_branch.name}`}
+              {patient.document_type} {patient.document_number}{age && ` · ${age}`}{patient.home_branch && ` · ${patient.home_branch.name}`}
             </p>
           </div>
         </div>
@@ -152,7 +152,7 @@ export default async function PatientPage(props: PageProps<"/pacientes/[id]">) {
           </Panel>
           <Panel title="Datos personales">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-              <Field label="Nacimiento" value={patient.birth_date ? formatDate(`${patient.birth_date}T12:00:00Z`, tz) : null} />
+              <Field label="Nacimiento" value={patient.birth_date ? `${formatDate(`${patient.birth_date}T12:00:00Z`, tz)} · ${age}` : null} />
               {showClinicalAdmin && <Field label="Sexo" value={{ M: "Masculino", F: "Femenino", I: "Indeterminado" }[patient.sex ?? ""] ?? null} />}
               {showClinicalAdmin && <Field label="EPS" value={patient.eps} />}
               {showClinicalAdmin && <Field label="Régimen" value={patient.health_regime ? HEALTH_REGIMES[patient.health_regime as keyof typeof HEALTH_REGIMES] : null} />}

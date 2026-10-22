@@ -27,6 +27,18 @@ export function ageFrom(birthDate: string | null | undefined, now = new Date()):
   return age;
 }
 
+/** Human age: "3 meses" under 2 years (babies), "34 años" otherwise, "recién nacido" under a month. */
+export function formatAge(birthDate: string | null | undefined, now = new Date()): string | null {
+  const years = ageFrom(birthDate, now);
+  if (years === null || years < 0) return null;
+  if (years >= 2) return `${years} años`;
+  const [y, m, d] = birthDate!.split("-").map(Number) as [number, number, number];
+  let months = (now.getFullYear() - y) * 12 + (now.getMonth() + 1 - m);
+  if (now.getDate() < d) months--;
+  if (months < 1) return "recién nacido";
+  return `${months} ${months === 1 ? "mes" : "meses"}`;
+}
+
 export function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join("");
 }

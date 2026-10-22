@@ -39,6 +39,7 @@ const baseSchema = z.object({
   secondLastName: optionalText(80),
   birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha no válida")
     .refine((v) => new Date(v) <= new Date(), "La fecha no puede ser futura")
+    .refine((v) => Number(v.slice(0, 4)) >= 1900, "Revisa el año")
     .optional().or(z.literal("")).transform((v) => v || null),
   sex: z.enum(["M", "F", "I"]).optional().or(z.literal("")).transform((v) => v || null),
   email: z.email("Correo no válido").optional().or(z.literal("")).transform((v) => v || null),
@@ -67,6 +68,9 @@ const baseSchema = z.object({
 export const patientSchema = baseSchema
   .superRefine((v, ctx) => {
     if (v.relation !== "customer" && !v.birthDate) ctx.addIssue({ code: "custom", path: ["birthDate"], message: "Requerida para pacientes" });
+    // Picking a day in the calendar without changing the year leaves today's date: almost always a slip.
+    const today = new Date().toLocaleDateString("en-CA");
+    if (v.relation !== "customer" && v.birthDate === today) ctx.addIssue({ code: "custom", path: ["birthDate"], message: "Revisa la fecha: es la de hoy" });
   })
   .transform((v) => (v.relation === "customer" ? { ...v, sex: null, eps: null, healthRegime: null } : v));
 

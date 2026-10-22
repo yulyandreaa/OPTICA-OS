@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDaysKey, ageFrom, formatMoney, localDateKey, minutesInTz, weekdayOfKey, zonedTimeToUtc } from "./format";
+import { addDaysKey, ageFrom, formatAge, formatMoney, localDateKey, minutesInTz, weekdayOfKey, zonedTimeToUtc } from "./format";
 
 describe("dates (America/Bogota, UTC-5)", () => {
   it("converts wall-clock time to UTC", () => {
@@ -15,6 +15,14 @@ describe("dates (America/Bogota, UTC-5)", () => {
     expect(weekdayOfKey("2026-10-16")).toBe(5); // viernes
   });
   it("computes age", () => expect(ageFrom("1990-10-17", new Date("2026-10-16T12:00:00"))).toBe(35));
+  it("shows babies' age in months", () => {
+    const now = new Date("2026-10-22T12:00:00");
+    expect(formatAge("1990-03-15", now)).toBe("36 años");
+    expect(formatAge("2026-07-23", now)).toBe("2 meses");
+    expect(formatAge("2025-01-10", now)).toBe("21 meses");
+    expect(formatAge("2026-10-10", now)).toBe("recién nacido");
+    expect(formatAge(null, now)).toBeNull();
+  });
 });
 
 describe("money", () => {
