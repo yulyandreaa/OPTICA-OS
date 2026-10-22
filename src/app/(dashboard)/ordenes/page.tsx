@@ -22,21 +22,30 @@ const COLUMNS: { title: string; statuses: LabStatus[]; accent: string }[] = [
   { title: "Entregadas (7 días)", statuses: ["delivered"], accent: "bg-border" },
 ];
 
-export default async function LabOrdersPage() {
+export default async function LabOrdersPage(props: PageProps<"/ordenes">) {
   const ctx = await requirePermission("lab_orders.read");
   await connection();
   const orders = await listLabOrders(await createClient(), ctx.tenant.id, ctx.activeBranchId);
   const now = await nowMs();
   const visible = orders.filter((o) => o.status !== "delivered" || now - new Date(o.updated_at).getTime() < 7 * 86_400_000);
+  const onlyLate = (await props.searchParams).atrasadas === "1";
   const late = visible.filter((o) => !["delivered", "received", "cancelled"].includes(o.status) && o.estimated_at && new Date(`${o.estimated_at}T23:59:59`).getTime() < now);
+
+  const shown = onlyLate ? late : visible;
 
   return (
     <>
       <PageHeader title="Órdenes de laboratorio" description={`${visible.filter((o) => o.status !== "delivered").length} en curso${late.length ? ` · ${late.length} atrasadas` : ""}`} />
-      {visible.length === 0 ? <EmptyState icon={FlaskConical} title="Sin órdenes" description="Se crean desde una venta con lentes." /> : (
+      {onlyLate && (
+        <p className="mb-3 flex items-center gap-2 text-sm">
+          Mostrando solo órdenes retrasadas ({late.length}).
+          <Link href="/ordenes" className="text-muted-foreground underline hover:text-foreground">Ver todas</Link>
+        </p>
+      )}
+      {shown.length === 0 ? <EmptyState icon={FlaskConical} title="Sin órdenes" description="Se crean desde una venta con lentes." /> : (
         <div className="grid gap-3 overflow-x-auto pb-2 lg:grid-cols-5">
           {COLUMNS.map((col) => {
-            const items = visible.filter((o) => col.statuses.includes(o.status as LabStatus));
+            const items = shown.filter((o) => col.statuses.includes(o.status as LabStatus));
             return (
               <section key={col.title} className="grid min-w-[240px] content-start gap-2 rounded-2xl bg-muted/50 p-2">
                 <h2 className="flex items-center gap-2 px-2 pt-1 text-sm font-semibold">

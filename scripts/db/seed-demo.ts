@@ -80,6 +80,8 @@ export async function runSeed(db: Db) {
   const existing = await db.query<{ id: string }>(`select id from public.tenants where slug = $1`, [SLUG]);
   const userIds = Object.fromEntries(USERS.map((u) => [u.key, uid(u.key)]));
   if (existing.rows[0]) {
+    // The dashboard labels demo figures; older local databases predate the flag.
+    await db.query(`update public.tenants set is_demo = true where id = $1 and not is_demo`, [existing.rows[0].id]);
     await refreshToday(db, existing.rows[0].id, uid);
     await seedModules(db, existing.rows[0].id, userIds);
     return;
@@ -96,6 +98,7 @@ export async function runSeed(db: Db) {
                'Cra. 13 # 63-20', 'Bogotá', 'Cundinamarca', 'optometry', $3, now())`,
       [tenantId, SLUG, uid("owner")],
     );
+    await db.query(`update public.tenants set is_demo = true where id = $1`, [tenantId]);
     await db.query(
       `insert into public.subscriptions (tenant_id, plan_id, status, current_period_start, current_period_end)
        select $1, id, 'active', date_trunc('month', now()), date_trunc('month', now()) + interval '1 month' from public.plans where code = 'BUSINESS'`,

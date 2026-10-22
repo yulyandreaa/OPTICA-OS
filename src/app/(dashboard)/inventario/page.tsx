@@ -27,6 +27,7 @@ export default async function InventoryPage(props: PageProps<"/inventario">) {
   const sp = await props.searchParams;
   const tab = TABS.find((t) => t.k === sp.tab)?.k ?? "vitrina";
   const q = typeof sp.q === "string" ? sp.q : undefined;
+  const filter = sp.filtro === "bajo" || sp.filtro === "agotado" ? sp.filtro : undefined;
   const db = await createClient();
   const branchId = ctx.activeBranchId;
   const branchName = ctx.branches.find((b) => b.id === branchId)?.name ?? "Todas las sedes";
@@ -38,7 +39,7 @@ export default async function InventoryPage(props: PageProps<"/inventario">) {
         {TABS.map((t) => <Link key={t.k} href={t.k === "vitrina" ? "/inventario" : `/inventario?tab=${t.k}`} className={cn("rounded-md px-3 py-1 text-sm", tab === t.k ? "bg-surface font-medium shadow-soft" : "text-muted-foreground hover:text-foreground")}>{t.l}</Link>)}
       </nav>
       {tab === "vitrina" && <VitrinaTab tenantId={ctx.tenant.id} db={db} />}
-      {tab === "stock" && <StockTab ctx={ctx} db={db} branchId={branchId} q={q} />}
+      {tab === "stock" && <StockTab ctx={ctx} db={db} branchId={branchId} q={q} filter={filter} />}
       {tab === "movimientos" && <MovementsTab ctx={ctx} db={db} branchId={branchId} />}
       {tab === "traslados" && <TransfersTab ctx={ctx} db={db} />}
     </>
@@ -54,20 +55,29 @@ async function VitrinaTab({ tenantId, db }: { tenantId: string; db: Db }) {
   return <LiveShowcase catalog={catalog} skuToVariant={skuToVariant} />;
 }
 
-async function StockTab({ ctx, db, branchId, q }: { ctx: Ctx; db: Db; branchId: string | null; q?: string }) {
-  const rows = await stockOverview(db, ctx.tenant.id, branchId, q);
-  const units = rows.reduce((a, r) => a + Number(r.quantity ?? 0), 0);
-  const value = rows.reduce((a, r) => a + Number(r.quantity ?? 0) * Number(r.cost ?? 0), 0);
-  const low = rows.filter((r) => r.is_low);
+async function StockTab({ ctx, db, branchId, q, filter }: { ctx: Ctx; db: Db; branchId: string | null; q?: string; filter?: "bajo" | "agotado" }) {
+  const all = await stockOverview(db, ctx.tenant.id, branchId, q);
+  // Same definitions as the dashboard alerts: out of stock = 0 units; low = above 0 but at or under the minimum.
+  const rows = filter === "agotado" ? all.filter((r) => Number(r.quantity ?? 0) <= 0)
+    : filter === "bajo" ? all.filter((r) => r.is_low && Number(r.quantity ?? 0) > 0) : all;
+  const units = all.reduce((a, r) => a + Number(r.quantity ?? 0), 0);
+  const value = all.reduce((a, r) => a + Number(r.quantity ?? 0) * Number(r.cost ?? 0), 0);
+  const low = all.filter((r) => r.is_low);
   const canAdjust = can(ctx.grants, "inventory.adjust");
   return (
     <div className="grid gap-4">
       <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard label="Unidades" value={units.toLocaleString("es-CO")} hint={`${rows.length} referencias`} />
+        <StatCard label="Unidades" value={units.toLocaleString("es-CO")} hint={`${all.length} referencias`} />
         <StatCard label="Valor al costo" value={formatMoney(value)} />
         <StatCard label="Stock bajo" value={low.length} hint="referencias en mínimo" />
       </div>
       <PatientSearch placeholder="Producto, SKU o código de barras" label="Buscar productos" />
+      {filter && (
+        <p className="flex items-center gap-2 text-sm">
+          Mostrando solo productos {filter === "agotado" ? "agotados" : "con stock bajo"} ({rows.length}).
+          <Link href="/inventario?tab=stock" className="text-muted-foreground underline hover:text-foreground">Ver todos</Link>
+        </p>
+      )}
       <div className="overflow-hidden rounded-xl border bg-surface shadow-soft">
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground">

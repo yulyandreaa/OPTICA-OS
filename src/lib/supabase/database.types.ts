@@ -2499,6 +2499,7 @@ export type Database = {
           created_at: string
           updated_at: string
           deleted_at: string | null
+          is_demo: boolean
         }
         Insert: {
           id?: string
@@ -2528,6 +2529,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
           deleted_at?: string | null
+          is_demo?: boolean
         }
         Update: {
           id?: string
@@ -2557,6 +2559,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
           deleted_at?: string | null
+          is_demo?: boolean
         }
         Relationships: [
 
@@ -2647,6 +2650,7 @@ export type Database = {
       create_sale: { Args: { p: Json }; Returns: string }
       create_tenant: { Args: { p_trade_name: string; p_legal_name: string; p_slug: string; p_tax_id_type: string; p_tax_id: string; p_tax_dv: string; p_tax_regime: string; p_specialty: string; p_branch_name: string; p_branch_city: string; p_branch_address: string; p_branch_phone: string }; Returns: string }
       dashboard_metrics: { Args: { p_tenant: string; p_branch?: string }; Returns: Json }
+      dashboard_summary: { Args: { p_tenant: string; p_from: string; p_to: string; p_prev_from: string; p_prev_to: string; p_branch?: string; p_bucket?: string }; Returns: Json }
       inventory_overview: { Args: { p_tenant: string; p_branch?: string; p_query?: string }; Returns: { variant_id: string | null; product_id: string | null; product_name: string | null; category: string | null; brand: string | null; sku: string | null; color_name: string | null; color_hex: string | null; image_url: string | null; price: number | null; cost: number | null; quantity: number | null; min_quantity: number | null; is_low: boolean | null }[] }
       invitation_preview: { Args: { p_token_hash: string }; Returns: Json }
       my_permissions: { Args: { p_tenant: string }; Returns: { permission_code: string | null; branch_id: string | null }[] }

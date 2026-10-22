@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { buttonVariants } from "@/components/ui/button";
-import { formatDate, formatMoney, formatTime, localDateKey } from "@/lib/format";
+import { addDaysKey, formatDate, formatMoney, formatTime, localDateKey, zonedTimeToUtc } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { can } from "@/modules/authz/permissions";
@@ -23,8 +23,13 @@ export default async function SalesPage(props: PageProps<"/ventas">) {
   const sp = await props.searchParams;
   const status = typeof sp.estado === "string" ? sp.estado : undefined;
   const db = await createClient();
-  const sales = await listSales(db, ctx.tenant.id, { branchId: ctx.activeBranchId, status, limit: 80 });
   const today = localDateKey(new Date(), ctx.timezone);
+  // "Cartera vencida" (dashboard alert): balance pending on sales older than 30 days.
+  const overdue = sp.vencidas === "1";
+  const sales = await listSales(db, ctx.tenant.id, {
+    branchId: ctx.activeBranchId, status, limit: 80,
+    createdBefore: overdue ? zonedTimeToUtc(addDaysKey(today, -30), "00:00", ctx.timezone) : undefined,
+  });
   const todays = sales.filter((s) => localDateKey(new Date(s.created_at), ctx.timezone) === today && s.status !== "cancelled");
   const totalToday = todays.reduce((a, s) => a + Number(s.total), 0);
   const pending = sales.filter((s) => s.status === "partial").reduce((a, s) => a + Number(s.balance), 0);
@@ -43,6 +48,12 @@ export default async function SalesPage(props: PageProps<"/ventas">) {
           <Link key={l} href={k ? `/ventas?estado=${k}` : "/ventas"} className={cn("rounded-md px-3 py-1 text-sm", status === k ? "bg-surface font-medium shadow-soft" : "text-muted-foreground")}>{l}</Link>
         ))}
       </nav>
+      {overdue && (
+        <p className="mb-3 flex items-center gap-2 text-sm">
+          Mostrando saldos de ventas con más de 30 días ({sales.length}).
+          <Link href="/ventas?estado=partial" className="text-muted-foreground underline hover:text-foreground">Ver todos los saldos</Link>
+        </p>
+      )}
       <div className="overflow-hidden rounded-xl border bg-surface shadow-soft">
         {sales.length === 0 ? <EmptyState icon={ShoppingBag} title="Aún no hay ventas" description="Registra la primera desde el punto de venta."
           action={<Link href="/ventas/pos" className={buttonVariants()}>Abrir POS</Link>} /> : (

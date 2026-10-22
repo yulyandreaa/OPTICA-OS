@@ -11,6 +11,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { initials } from "@/lib/format";
 import { signOutAction } from "@/modules/auth/actions";
 import { SidebarContent } from "./app-sidebar";
+import { usePathname } from "next/navigation";
 import { BranchSwitcher } from "./branch-switcher";
 import { SearchTrigger } from "./command-bar";
 import { useShell } from "./shell-context";
@@ -18,6 +19,8 @@ import { UniversalAction } from "./universal-action";
 
 export function Topbar() {
   const shell = useShell();
+  // The owner dashboard has its own branch selector in its header.
+  const ownDashboardSwitcher = usePathname() === "/inicio" && shell.can("reports.financial");
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -35,7 +38,7 @@ export function Topbar() {
       <div className="min-w-0 flex-1"><SearchTrigger /></div>
 
       <div className="flex items-center gap-2">
-        <BranchSwitcher />
+        {!ownDashboardSwitcher && <BranchSwitcher />}
         <UniversalAction />
         <Button variant="ghost" size="icon" aria-label="Notificaciones" className="relative">
           <Bell />

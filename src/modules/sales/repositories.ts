@@ -1,12 +1,13 @@
 import "server-only";
 import type { ServerSupabase } from "@/lib/supabase/server";
 
-export async function listSales(db: ServerSupabase, tenantId: string, opts: { branchId: string | null; status?: string; limit?: number }) {
+export async function listSales(db: ServerSupabase, tenantId: string, opts: { branchId: string | null; status?: string; createdBefore?: Date; limit?: number }) {
   let q = db.from("sales")
     .select("id, number, status, total, paid_total, balance, created_at, patient:patients(id, full_name), seller:profiles!sales_seller_profile_fkey(full_name), branch:branches(name)")
     .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(opts.limit ?? 60);
   if (opts.branchId) q = q.eq("branch_id", opts.branchId);
   if (opts.status) q = q.eq("status", opts.status);
+  if (opts.createdBefore) q = q.lt("created_at", opts.createdBefore.toISOString()).gt("balance", 0);
   const { data } = await q;
   return data ?? [];
 }

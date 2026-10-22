@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listAppointments } from "@/modules/appointments/repositories/appointments";
 import { todayKey } from "@/modules/appointments/utils/agenda";
 import { can } from "@/modules/authz/permissions";
+import { AdminDashboard } from "@/modules/dashboard/components/admin-dashboard";
 import { HealthScoreCard } from "@/modules/dashboard/components/health-score";
 import { ShowcaseCard } from "@/modules/inventory/components/showcase-card";
 import { OnboardingChecklist } from "@/modules/dashboard/components/onboarding-checklist";
@@ -31,8 +32,10 @@ export default async function HomePage(props: PageProps<"/inicio">) {
   const sp = await props.searchParams;
   const role = primaryRole(ctx);
   const tz = ctx.timezone;
-  const db = await createClient();
   const today = todayKey(tz);
+  // Owner dashboard: financial KPIs. Everyone else (e.g. sales reps) keeps the operational home below.
+  if (can(ctx.grants, "reports.financial")) return <AdminDashboard ctx={ctx} searchParams={sp} today={today} />;
+  const db = await createClient();
   const canAppts = can(ctx.grants, "appointments.read");
   const isClinician = role === "OPTOMETRIST" || role === "OPHTHALMOLOGIST";
   const isManager = ["OWNER", "ADMIN", "BRANCH_MANAGER"].includes(role);
