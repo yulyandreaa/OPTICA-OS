@@ -1,12 +1,11 @@
 "use client";
-import { CornerDownLeft, Search, UserRound } from "lucide-react";
+import { CornerDownLeft, List, Search, UserPlus, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import {
-  Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator,
+  Command, CommandDialog, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command";
 import { globalSearchAction, type SearchHit } from "@/modules/search/actions";
-import { NAV_PAGES } from "./nav-config";
 import { useShell } from "./shell-context";
 import { UNIVERSAL_ACTIONS } from "./universal-action";
 
@@ -47,21 +46,33 @@ export function CommandBar() {
   const visibleHits = query.trim().length < 2 ? [] : hits;
 
   const go = (href: string) => { setOpen(false); setQuery(""); router.push(href); };
-  const pages = NAV_PAGES.filter((i) => shell.can(i.permission));
-  const actions = UNIVERSAL_ACTIONS.filter((a) => shell.can(a.permission));
+  const q = query.trim();
+  const canCreate = shell.can("patients.create");
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen} title="Buscar" description="Busca personas, documentos, teléfonos o acciones" className="sm:max-w-xl">
-      {/* CommandDialog is only the dialog shell: cmdk's parts must live inside <Command> or they crash. */}
-      <Command>
-      <CommandInput placeholder="Nombre, documento, teléfono, correo o acción…" value={query} onValueChange={setQuery} />
+    <CommandDialog open={open} onOpenChange={setOpen} title="Buscar clientes y pacientes" description="Busca por nombre, documento, teléfono o correo" className="sm:max-w-xl">
+      {/* CommandDialog is only the dialog shell: cmdk's parts must live inside <Command> or they crash.
+          The server already filters, so cmdk's own fuzzy filter is off. */}
+      <Command shouldFilter={false}>
+      <CommandInput placeholder="Nombre, documento, teléfono o correo…" value={query} onValueChange={setQuery} />
       <CommandList className="max-h-[420px]">
-        <CommandEmpty>{searching ? "Buscando…" : "Sin resultados. Prueba con el documento o el teléfono."}</CommandEmpty>
-        {visibleHits.length > 0 && (
+        {q.length < 2 ? (
+          <p className="px-4 py-8 text-center text-sm text-muted-foreground">Escribe al menos 2 letras o números para buscar clientes y pacientes.</p>
+        ) : visibleHits.length === 0 ? (
+          <>
+            <p className="px-4 pt-6 pb-2 text-center text-sm text-muted-foreground">
+              {searching ? "Buscando…" : `No encontramos a nadie con “${q}”. Prueba con el documento o el teléfono.`}
+            </p>
+            {!searching && canCreate && (
+              <CommandGroup>
+                <CommandItem value="nuevo" onSelect={() => go("/pacientes/nuevo")}><UserPlus className="size-4" /> Crear nuevo registro</CommandItem>
+              </CommandGroup>
+            )}
+          </>
+        ) : (
           <CommandGroup heading="Clientes y pacientes">
             {visibleHits.map((h) => (
-              // The server already matched the query; `keywords` keeps cmdk's own filter from hiding the hit.
-              <CommandItem key={h.id} value={`persona ${h.id}`} keywords={[query]} onSelect={() => go(h.href)}>
+              <CommandItem key={h.id} value={h.id} onSelect={() => go(h.href)}>
                 <UserRound className="size-4" />
                 <span className="min-w-0">
                   <span className="block truncate">{h.title}{h.badge && <span className="ml-2 text-xs text-muted-foreground">{h.badge}</span>}</span>
@@ -69,26 +80,14 @@ export function CommandBar() {
                 </span>
               </CommandItem>
             ))}
+            <CommandItem value="directorio" onSelect={() => go(`/pacientes?q=${encodeURIComponent(q)}`)} className="text-muted-foreground">
+              <List className="size-4" /> Ver todos los resultados en el directorio
+            </CommandItem>
           </CommandGroup>
         )}
-        <CommandGroup heading="Acciones">
-          {actions.map((a) => (
-            <CommandItem key={a.label} value={`nuevo ${a.label}`} onSelect={() => go(a.href)}>
-              <a.icon className="size-4" /> Nuevo: {a.label}
-            </CommandItem>
-          ))}
-        </CommandGroup>
-        <CommandSeparator />
-        <CommandGroup heading="Ir a">
-          {pages.map((p) => (
-            <CommandItem key={p.href} value={`ir ${p.label}`} onSelect={() => go(p.href)}>
-              <p.icon className="size-4" /> {p.label}
-            </CommandItem>
-          ))}
-        </CommandGroup>
       </CommandList>
       <div className="flex items-center gap-3 border-t px-3 py-2 text-[11px] text-muted-foreground">
-        <span className="inline-flex items-center gap-1"><CornerDownLeft className="size-3" /> abrir</span>
+        <span className="inline-flex items-center gap-1"><CornerDownLeft className="size-3" /> abrir ficha</span>
         <span>↑↓ navegar</span>
         <span className="ml-auto">esc cerrar</span>
       </div>
@@ -106,7 +105,7 @@ export function SearchTrigger() {
       className="flex h-8 w-full max-w-sm items-center gap-2 rounded-lg border bg-surface px-2.5 text-sm text-muted-foreground shadow-soft outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40"
     >
       <Search className="size-4" />
-      <span className="truncate">Buscar personas, documentos…</span>
+      <span className="truncate">Buscar clientes y pacientes…</span>
       <kbd className="ml-auto hidden rounded border bg-muted px-1.5 font-mono text-[10px] sm:inline">⌘K</kbd>
     </button>
   );

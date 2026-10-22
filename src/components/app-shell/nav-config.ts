@@ -67,8 +67,4 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-/** Every navigable page (sections and their sub-pages), for the command bar. */
-export const NAV_PAGES: NavItem[] = NAV_GROUPS.flatMap((g) => g.items).flatMap((item) =>
-  item.children ? item.children.map((c) => ({ ...c, icon: item.icon })) : [item]);
-
 export const NAV_PLATFORM: NavItem = { href: "/admin", label: "Super admin", icon: ShieldCheck, permission: "dashboard.view" };
