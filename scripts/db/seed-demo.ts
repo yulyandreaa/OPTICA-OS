@@ -249,6 +249,7 @@ async function refreshToday(db: Db, tenantId: string, uid: (k: (typeof USERS)[nu
      where p.tenant_id = $1
        and coalesce((select max(a.starts_at) from public.appointments a where a.patient_id = p.id and a.status = 'completed'), now()) > now() - interval '12 months'
      order by p.created_at desc`, [tenantId])).rows.map((r) => r.id);
+  if (patients.length === 0) { console.log("✓ Sin pacientes: no se genera agenda demo"); return; }
   const types = new Map((await db.query<{ id: string; code: string; duration_minutes: number }>(`select id, code, duration_minutes from public.appointment_types where tenant_id = $1`, [tenantId])).rows.map((r) => [r.code, r]));
   const nowMs = Date.now();
 
