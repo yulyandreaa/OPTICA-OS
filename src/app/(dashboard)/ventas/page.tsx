@@ -66,8 +66,8 @@ export default async function SalesPage(props: PageProps<"/ventas">) {
               {sales.map((s) => {
                 const st = SALE_STATUS[s.status] ?? SALE_STATUS.partial!;
                 return (
-                  <tr key={s.id} className="relative hover:bg-muted/40">
-                    <td className="px-4 py-3"><Link href={`/ventas/${s.id}`} className="font-mono text-xs font-medium after:absolute after:inset-0">{s.number}</Link>
+                  <tr key={s.id} className="hover:bg-muted/40">
+                    <td className="px-4 py-3"><Link href={`/ventas/${s.id}`} className="font-mono text-xs font-medium text-brand hover:underline">{s.number}</Link>
                       <p className="text-xs text-muted-foreground">{formatDate(s.created_at, ctx.timezone, { day: "numeric", month: "short" })} · {formatTime(s.created_at, ctx.timezone)}</p></td>
                     <td className="px-4 py-3">{s.patient?.full_name ?? <span className="text-muted-foreground">Cliente de mostrador</span>}</td>
                     <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">{s.seller?.full_name}</td>

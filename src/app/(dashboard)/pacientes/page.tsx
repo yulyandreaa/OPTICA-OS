@@ -126,9 +126,9 @@ async function Directory({ ctx, params, canCreate }: { ctx: AppContext; params: 
                   {rows.map((p) => {
                     const rel = relationOf(p);
                     return (
-                      <tr key={p.id} className="relative hover:bg-muted/40">
+                      <tr key={p.id} className="hover:bg-muted/40">
                         <td className="px-4 py-3">
-                          <Link href={`/pacientes/${p.id}`} className="flex items-center gap-3 font-medium after:absolute after:inset-0 hover:text-brand">
+                          <Link href={`/pacientes/${p.id}`} className="flex w-fit items-center gap-3 rounded-md font-medium outline-none hover:text-brand focus-visible:ring-3 focus-visible:ring-ring/40">
                             <Avatar className="size-8"><AvatarFallback className="text-xs">{initials(p.full_name)}</AvatarFallback></Avatar>
                             <span className="truncate">{p.full_name}</span>
                           </Link>
