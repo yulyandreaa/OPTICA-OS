@@ -4,6 +4,8 @@ import type { PatientInput } from "../schemas";
 /** Form → DB row. tenant_id is always injected server-side from the session context. */
 export function toPatientRow(v: PatientInput): Omit<TablesInsert<"patients">, "tenant_id"> {
   return {
+    is_customer: v.relation !== "patient",
+    is_patient: v.relation !== "customer",
     document_type: v.documentType,
     document_number: v.documentNumber.toUpperCase(),
     first_name: v.firstName,

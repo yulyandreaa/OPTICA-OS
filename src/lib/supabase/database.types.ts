@@ -1190,6 +1190,11 @@ export type Database = {
           created_at: string
           updated_at: string
           deleted_at: string | null
+          is_customer: boolean
+          is_patient: boolean
+          is_active: boolean
+          deactivated_at: string | null
+          deactivated_by: string | null
         }
         Insert: {
           id?: string
@@ -1223,6 +1228,11 @@ export type Database = {
           created_at?: string
           updated_at?: string
           deleted_at?: string | null
+          is_customer?: boolean
+          is_patient?: boolean
+          is_active?: boolean
+          deactivated_at?: string | null
+          deactivated_by?: string | null
         }
         Update: {
           id?: string
@@ -1256,10 +1266,16 @@ export type Database = {
           created_at?: string
           updated_at?: string
           deleted_at?: string | null
+          is_customer?: boolean
+          is_patient?: boolean
+          is_active?: boolean
+          deactivated_at?: string | null
+          deactivated_by?: string | null
         }
         Relationships: [
           { foreignKeyName: "patients_assigned_profile_fkey"; columns: ["assigned_to"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
           { foreignKeyName: "patients_created_by_fkey"; columns: ["created_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "patients_deactivated_by_fkey"; columns: ["deactivated_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
           { foreignKeyName: "patients_home_branch_id_tenant_id_fkey"; columns: ["home_branch_id","tenant_id"]; isOneToOne: false; referencedRelation: "branches"; referencedColumns: ["id","tenant_id"] },
           { foreignKeyName: "patients_tenant_id_assigned_to_fkey"; columns: ["tenant_id","assigned_to"]; isOneToOne: false; referencedRelation: "tenant_members"; referencedColumns: ["tenant_id","user_id"] },
           { foreignKeyName: "patients_tenant_id_fkey"; columns: ["tenant_id"]; isOneToOne: false; referencedRelation: "tenants"; referencedColumns: ["id"] }
@@ -2651,9 +2667,11 @@ export type Database = {
       create_tenant: { Args: { p_trade_name: string; p_legal_name: string; p_slug: string; p_tax_id_type: string; p_tax_id: string; p_tax_dv: string; p_tax_regime: string; p_specialty: string; p_branch_name: string; p_branch_city: string; p_branch_address: string; p_branch_phone: string }; Returns: string }
       dashboard_metrics: { Args: { p_tenant: string; p_branch?: string }; Returns: Json }
       dashboard_summary: { Args: { p_tenant: string; p_from: string; p_to: string; p_prev_from: string; p_prev_to: string; p_branch?: string; p_bucket?: string }; Returns: Json }
+      find_person_matches: { Args: { p_tenant: string; p_document_type: string; p_document_number: string; p_first_name: string; p_last_name: string; p_birth_date?: string; p_phone?: string; p_email?: string; p_exclude?: string }; Returns: { id: string | null; full_name: string | null; document_type: string | null; document_number: string | null; phone: string | null; email: string | null; is_active: boolean | null; reasons: string[] | null }[] }
       inventory_overview: { Args: { p_tenant: string; p_branch?: string; p_query?: string }; Returns: { variant_id: string | null; product_id: string | null; product_name: string | null; category: string | null; brand: string | null; sku: string | null; color_name: string | null; color_hex: string | null; image_url: string | null; price: number | null; cost: number | null; quantity: number | null; min_quantity: number | null; is_low: boolean | null }[] }
       invitation_preview: { Args: { p_token_hash: string }; Returns: Json }
       my_permissions: { Args: { p_tenant: string }; Returns: { permission_code: string | null; branch_id: string | null }[] }
+      people_summary: { Args: { p_tenant: string }; Returns: Json }
       public_quote: { Args: { p_token: string }; Returns: Json }
       recall_opportunities: { Args: { p_tenant: string; p_limit?: number }; Returns: { patient_id: string | null; full_name: string | null; phone: string | null; last_visit: string | null; months_since: number | null }[] }
       recall_opportunities_count: { Args: { p_tenant: string }; Returns: number }

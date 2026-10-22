@@ -15,36 +15,42 @@ import { createClient } from "@/lib/supabase/server";
 import { nowMs } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { statusMeta } from "@/modules/appointments/utils/status";
-import { can } from "@/modules/authz/permissions";
+import { can, type Permission } from "@/modules/authz/permissions";
+import { PersonActiveButton } from "@/modules/patients/components/person-active-button";
+import { RelationBadge } from "@/modules/patients/components/relation-badge";
 import {
   getPatient, getPatientAppointments, getPatientConsents, getPatientTimeline,
 } from "@/modules/patients/repositories/patients";
-import { CONTACT_PREFERENCES, HEALTH_REGIMES, PATIENT_SOURCES } from "@/modules/patients/schemas";
+import { CONTACT_PREFERENCES, HEALTH_REGIMES, PATIENT_SOURCES, relationOf } from "@/modules/patients/schemas";
 import { requirePermission } from "@/modules/tenants/services/context";
 import { StartConsultationButton } from "@/modules/clinical/components/start-consultation-button";
 import { RxTable } from "@/modules/clinical/components/rx-table";
 import { RECORD_STATUS, RECORD_TYPES, LENS_TYPES } from "@/modules/clinical/constants";
 import { listPatientPrescriptions } from "@/modules/clinical/repositories";
-import { SALE_STATUS, QUOTE_STATUS } from "@/modules/sales/constants";
+import { PAYMENT_METHODS, SALE_STATUS, QUOTE_STATUS } from "@/modules/sales/constants";
 import { LAB_STATUS, type LabStatus } from "@/modules/labs/constants";
 import { INVOICE_STATUS } from "@/modules/billing/constants";
 import { formatMoney } from "@/lib/format";
 
-export const metadata: Metadata = { title: "Paciente" };
+export const metadata: Metadata = { title: "Ficha de la persona" };
 
+/**
+ * Tabs only appear when the user holds the permission behind them. Clinical tabs additionally need the
+ * person to be a patient: commercial users never see clinical sections, not even as "no access".
+ */
 const TABS = [
-  { key: "resumen", label: "Resumen" },
-  { key: "historia", label: "Historia clínica" },
-  { key: "formulas", label: "Fórmulas" },
-  { key: "citas", label: "Citas" },
-  { key: "compras", label: "Compras" },
-  { key: "cotizaciones", label: "Cotizaciones" },
-  { key: "ordenes", label: "Órdenes" },
-  { key: "facturas", label: "Facturas" },
+  { key: "resumen", label: "Información personal" },
+  { key: "compras", label: "Compras y pagos", permission: "sales.read" },
+  { key: "cotizaciones", label: "Cotizaciones", permission: "quotes.read" },
+  { key: "facturas", label: "Facturas", permission: "billing.read" },
+  { key: "ordenes", label: "Órdenes ópticas", permission: "lab_orders.read" },
+  { key: "citas", label: "Citas", permission: "appointments.read", clinical: true },
+  { key: "historia", label: "Historia clínica", permission: "medical_records.read", clinical: true },
+  { key: "formulas", label: "Fórmulas", permission: "prescriptions.read", clinical: true },
   { key: "documentos", label: "Documentos", phase: 11 },
   { key: "conversaciones", label: "Conversaciones", phase: 9 },
   { key: "actividad", label: "Actividad" },
-] as const;
+] as const satisfies readonly { key: string; label: string; permission?: Permission; clinical?: boolean; phase?: number }[];
 
 const UPCOMING_TAB_COPY: Record<string, { icon: typeof FileHeart; text: string }> = {
   documentos: { icon: FileHeart, text: "Consentimientos firmados, exámenes y adjuntos en almacenamiento privado con enlaces temporales." },
@@ -54,13 +60,15 @@ const UPCOMING_TAB_COPY: Record<string, { icon: typeof FileHeart; text: string }
 export default async function PatientPage(props: PageProps<"/pacientes/[id]">) {
   const { id } = await props.params;
   const sp = await props.searchParams;
-  const tab = TABS.find((t) => t.key === sp.tab)?.key ?? "resumen";
   const ctx = await requirePermission("patients.read");
   const db = await createClient();
   const patient = await getPatient(db, ctx.tenant.id, id);
   if (!patient) notFound();
+  const visibleTabs = TABS.filter((t) => (!("permission" in t) || can(ctx.grants, t.permission)) && (!("clinical" in t) || patient.is_patient));
+  const tab = visibleTabs.find((t) => t.key === sp.tab)?.key ?? "resumen";
+  const showClinicalAdmin = patient.is_patient && can(ctx.grants, "medical_records.read");
 
-  const canReadAppts = can(ctx.grants, "appointments.read");
+  const canReadAppts = can(ctx.grants, "appointments.read") && patient.is_patient;
   const [appointments, timeline, consents] = await Promise.all([
     canReadAppts ? getPatientAppointments(db, ctx.tenant.id, id) : Promise.resolve([]),
     getPatientTimeline(db, ctx.tenant.id, id),
@@ -83,8 +91,12 @@ export default async function PatientPage(props: PageProps<"/pacientes/[id]">) {
         <div className="flex min-w-0 items-center gap-4">
           <Avatar className="size-14 border"><AvatarFallback className="bg-brand-soft text-lg font-medium text-brand">{initials(patient.full_name)}</AvatarFallback></Avatar>
           <div className="min-w-0">
-            <Link href="/pacientes" className="text-xs text-muted-foreground hover:text-foreground">Pacientes</Link>
-            <h1 className="truncate text-2xl font-semibold tracking-tight">{patient.full_name}</h1>
+            <Link href="/pacientes" className="text-xs text-muted-foreground hover:text-foreground">Clientes y pacientes</Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="truncate text-2xl font-semibold tracking-tight">{patient.full_name}</h1>
+              <RelationBadge relation={relationOf(patient)} />
+              {!patient.is_active && <StatusBadge tone="neutral">Inactivo</StatusBadge>}
+            </div>
             <p className="text-sm text-muted-foreground tabular">
               {patient.document_type} {patient.document_number}{age !== null && ` · ${age} años`}{patient.home_branch && ` · ${patient.home_branch.name}`}
             </p>
@@ -97,17 +109,24 @@ export default async function PatientPage(props: PageProps<"/pacientes/[id]">) {
             </a>
           )}
           {can(ctx.grants, "patients.update") && <Link href={`/pacientes/${id}/editar`} className={buttonVariants({ variant: "outline" })}><Pencil /> Editar</Link>}
-          {can(ctx.grants, "quotes.create") && <Link href={`/cotizaciones/nueva?paciente=${id}`} className={buttonVariants({ variant: "outline" })}><Receipt /> Cotizar</Link>}
-          {can(ctx.grants, "pos.use") && <Link href={`/ventas/pos?paciente=${id}`} className={buttonVariants({ variant: "outline" })}><ShoppingBag /> Vender</Link>}
-          {can(ctx.grants, "medical_records.create") && <StartConsultationButton variant="outline" patientId={id} />}
-          {can(ctx.grants, "appointments.create") && <Link href={`/agenda?nueva=1&paciente=${id}`} className={buttonVariants()}><CalendarPlus /> Agendar cita</Link>}
+          {can(ctx.grants, "patients.delete") && <PersonActiveButton id={id} name={patient.full_name} active={patient.is_active} />}
+          {patient.is_active && can(ctx.grants, "quotes.create") && <Link href={`/cotizaciones/nueva?paciente=${id}`} className={buttonVariants({ variant: "outline" })}><Receipt /> Cotizar</Link>}
+          {patient.is_active && can(ctx.grants, "pos.use") && <Link href={`/ventas/pos?paciente=${id}`} className={buttonVariants({ variant: "outline" })}><ShoppingBag /> Vender</Link>}
+          {patient.is_active && can(ctx.grants, "medical_records.create") && <StartConsultationButton variant="outline" patientId={id} />}
+          {patient.is_active && can(ctx.grants, "appointments.create") && <Link href={`/agenda?nueva=1&paciente=${id}`} className={buttonVariants()}><CalendarPlus /> Agendar cita</Link>}
         </div>
       </div>
 
+      {!patient.is_active && (
+        <p className="rounded-xl border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+          Registro inactivo{patient.deactivated_at ? ` desde el ${formatDate(patient.deactivated_at, tz)}` : ""}. Su historial se conserva; para venderle o agendarle, reactívalo.
+        </p>
+      )}
+
       {/* Tabs */}
-      <nav className="-mx-4 overflow-x-auto border-b px-4 sm:mx-0 sm:px-0" aria-label="Secciones del paciente">
+      <nav className="-mx-4 overflow-x-auto border-b px-4 sm:mx-0 sm:px-0" aria-label="Secciones de la ficha">
         <ul className="flex min-w-max gap-1">
-          {TABS.map((t) => (
+          {visibleTabs.map((t) => (
             <li key={t.key}>
               <Link href={tabHref(t.key)} aria-current={tab === t.key ? "page" : undefined}
                 className={cn("inline-flex h-10 items-center gap-1.5 border-b-2 px-3 text-sm transition-colors",
@@ -131,12 +150,12 @@ export default async function PatientPage(props: PageProps<"/pacientes/[id]">) {
               <InfoRow icon={MessageCircle} label="Prefiere" value={CONTACT_PREFERENCES[patient.contact_preference as keyof typeof CONTACT_PREFERENCES]} />
             </dl>
           </Panel>
-          <Panel title="Datos clínico-administrativos">
+          <Panel title="Datos personales">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
               <Field label="Nacimiento" value={patient.birth_date ? formatDate(`${patient.birth_date}T12:00:00Z`, tz) : null} />
-              <Field label="Sexo" value={{ M: "Masculino", F: "Femenino", I: "Indeterminado" }[patient.sex ?? ""] ?? null} />
-              <Field label="EPS" value={patient.eps} />
-              <Field label="Régimen" value={patient.health_regime ? HEALTH_REGIMES[patient.health_regime as keyof typeof HEALTH_REGIMES] : null} />
+              {showClinicalAdmin && <Field label="Sexo" value={{ M: "Masculino", F: "Femenino", I: "Indeterminado" }[patient.sex ?? ""] ?? null} />}
+              {showClinicalAdmin && <Field label="EPS" value={patient.eps} />}
+              {showClinicalAdmin && <Field label="Régimen" value={patient.health_regime ? HEALTH_REGIMES[patient.health_regime as keyof typeof HEALTH_REGIMES] : null} />}
               <Field label="Ocupación" value={patient.occupation} />
               <Field label="Origen" value={patient.source ? PATIENT_SOURCES[patient.source as keyof typeof PATIENT_SOURCES] : null} />
               <Field label="Emergencia" value={patient.emergency_contact_name ? `${patient.emergency_contact_name} · ${patient.emergency_contact_phone ?? ""}` : null} className="col-span-2" />
@@ -163,9 +182,9 @@ export default async function PatientPage(props: PageProps<"/pacientes/[id]">) {
           {tab === "resumen" && (
             <>
               <div className="grid gap-3 sm:grid-cols-3">
-                <MiniStat label="Próxima cita" value={upcoming[0] ? `${formatDate(upcoming[0].starts_at, tz, { day: "numeric", month: "short" })} · ${formatTime(upcoming[0].starts_at, tz)}` : "Sin agendar"} />
-                <MiniStat label="Última consulta" value={lastVisit ? formatDate(lastVisit.starts_at, tz) : "Sin consultas"} />
-                <MiniStat label="Paciente desde" value={formatDate(patient.created_at, tz, { month: "long", year: "numeric" })} />
+                {canReadAppts && <MiniStat label="Próxima cita" value={upcoming[0] ? `${formatDate(upcoming[0].starts_at, tz, { day: "numeric", month: "short" })} · ${formatTime(upcoming[0].starts_at, tz)}` : "Sin agendar"} />}
+                {canReadAppts && <MiniStat label="Última consulta" value={lastVisit ? formatDate(lastVisit.starts_at, tz) : "Sin consultas"} />}
+                <MiniStat label="Registrado desde" value={formatDate(patient.created_at, tz, { month: "long", year: "numeric" })} />
               </div>
               {lastVisit && now - new Date(lastVisit.starts_at).getTime() > 365 * 86_400_000 && (
                 <div className="flex items-start gap-3 rounded-xl border border-brand/20 bg-brand-soft p-4 text-sm">
@@ -315,10 +334,31 @@ async function loadTab(db: Awaited<ReturnType<typeof createClient>>, ctx: Ctx, p
     if (!can(ctx.grants, "sales.read")) return empty("No tienes acceso a ventas");
     const { data } = await db.from("sales").select("id, number, status, total, balance, created_at").eq("tenant_id", t).eq("patient_id", patientId).order("created_at", { ascending: false });
     if (!data?.length) return empty("Sin compras todavía");
-    const total = data.filter((s) => s.status !== "cancelled").reduce((a, s) => a + Number(s.total), 0);
-    return <Panel title="Compras" description={`Valor de vida: ${formatMoney(total)} en ${data.length} compras`} bodyClassName="p-0"><ul className="divide-y">{data.map((s) =>
-      row(`/ventas/${s.id}`, <span className="font-mono">{s.number}</span>, `${formatDate(s.created_at, tz)}${Number(s.balance) > 0 ? ` · saldo ${formatMoney(s.balance)}` : ""}`,
-        <span className="flex items-center gap-3"><span className="text-sm tabular">{formatMoney(s.total)}</span><StatusBadge tone={SALE_STATUS[s.status]?.tone}>{SALE_STATUS[s.status]?.label}</StatusBadge></span>, s.id))}</ul></Panel>;
+    // Same rule as the dashboard: cancelled and returned sales don't count as purchases or debt.
+    const valid = data.filter((s) => s.status === "partial" || s.status === "paid");
+    const total = valid.reduce((a, s) => a + Number(s.total), 0);
+    const balance = valid.reduce((a, s) => a + Number(s.balance), 0);
+    const { data: payments } = await db.from("payments").select("id, method, amount, created_at, sale:sales!inner(id, number, patient_id)")
+      .eq("tenant_id", t).eq("sale.patient_id", patientId).order("created_at", { ascending: false }).limit(20);
+    return (
+      <>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <MiniStat label="Total comprado" value={formatMoney(total)} />
+          <MiniStat label="Saldo pendiente" value={formatMoney(balance)} />
+          <MiniStat label="Compras" value={String(valid.length)} />
+        </div>
+        <Panel title="Compras" bodyClassName="p-0"><ul className="divide-y">{data.map((s) =>
+          row(`/ventas/${s.id}`, <span className="font-mono">{s.number}</span>, `${formatDate(s.created_at, tz)}${Number(s.balance) > 0 && s.status === "partial" ? ` · saldo ${formatMoney(s.balance)}` : ""}`,
+            <span className="flex items-center gap-3"><span className="text-sm tabular">{formatMoney(s.total)}</span><StatusBadge tone={SALE_STATUS[s.status]?.tone}>{SALE_STATUS[s.status]?.label}</StatusBadge></span>, s.id))}</ul></Panel>
+        <Panel title="Pagos recibidos" description="Últimos 20" bodyClassName="p-0">
+          {!payments?.length ? <p className="px-4 py-6 text-sm text-muted-foreground">Sin pagos registrados.</p> : (
+            <ul className="divide-y">{payments.map((p) =>
+              row(`/ventas/${p.sale.id}`, PAYMENT_METHODS[p.method as keyof typeof PAYMENT_METHODS] ?? p.method, `${formatDate(p.created_at, tz)} · venta ${p.sale.number}`,
+                <span className="text-sm font-medium tabular">{formatMoney(p.amount)}</span>, p.id))}</ul>
+          )}
+        </Panel>
+      </>
+    );
   }
   if (tab === "cotizaciones") {
     if (!can(ctx.grants, "quotes.read")) return empty("No tienes acceso a cotizaciones");

@@ -1,6 +1,7 @@
 import "server-only";
 import type { ServerSupabase } from "@/lib/supabase/server";
 import type { PatientListParams } from "../schemas";
+import { searchFilter } from "../utils/search";
 
 export const PAGE_SIZE = 25;
 
@@ -17,18 +18,22 @@ function encodeCursor(createdAt: string, id: string) {
 export async function listPatients(db: ServerSupabase, tenantId: string, params: PatientListParams) {
   let query = db
     .from("patients")
-    .select("id, full_name, document_type, document_number, phone, email, birth_date, city, source, created_at, home_branch:branches(name)")
+    .select("id, full_name, document_type, document_number, phone, email, is_customer, is_patient, is_active, created_at")
     .eq("tenant_id", tenantId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(PAGE_SIZE + 1);
 
-  if (params.q) {
-    const q = params.q.replace(/[%_,()]/g, " ").trim();
-    const digits = q.replace(/\D/g, "");
-    query = digits.length >= 4 ? query.or(`document_number.ilike.${digits}%,phone.ilike.%${digits}%`) : query.ilike("full_name", `%${q}%`);
+  // Relationship filter. "inactivos" lists only inactive people; every other tab only active ones.
+  if (params.tipo === "inactivos") query = query.eq("is_active", false);
+  else {
+    query = query.eq("is_active", true);
+    if (params.tipo === "clientes") query = query.eq("is_customer", true);
+    if (params.tipo === "pacientes") query = query.eq("is_patient", true);
+    if (params.tipo === "ambos") query = query.eq("is_customer", true).eq("is_patient", true);
   }
+  if (params.q) query = applySearch(query, params.q);
   if (params.branch) query = query.eq("home_branch_id", params.branch);
   if (params.segment === "new") query = query.gte("created_at", new Date(Date.now() - 30 * 86_400_000).toISOString());
 
@@ -44,6 +49,23 @@ export async function listPatients(db: ServerSupabase, tenantId: string, params:
   return { rows: page, nextCursor: hasMore && last ? encodeCursor(last.created_at, last.id) : null };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the PostgREST builder type is not worth spelling out here
+function applySearch<Q extends { ilike: any; or: any }>(query: Q, raw: string): Q {
+  const f = searchFilter(raw);
+  if (!f.value) return query;
+  if (f.kind === "email") return query.ilike("email", `${f.value}%`);
+  if (f.kind === "number") return query.or(`document_number.ilike.${f.value}%,phone.ilike.%${f.value}%,whatsapp.ilike.%${f.value}%`);
+  if (f.kind === "document") return query.ilike("document_number", `${f.value}%`);
+  return query.ilike("full_name", `%${f.value}%`);
+}
+
+export async function getPeopleSummary(db: ServerSupabase, tenantId: string) {
+  const { data, error } = await db.rpc("people_summary", { p_tenant: tenantId });
+  if (error) throw error;
+  const s = data as Record<string, number>;
+  return { total: Number(s.total), customers: Number(s.customers), patients: Number(s.patients), both: Number(s.both), inactive: Number(s.inactive) };
+}
+
 export async function countPatients(db: ServerSupabase, tenantId: string) {
   const { count } = await db.from("patients").select("id", { count: "estimated", head: true }).eq("tenant_id", tenantId).is("deleted_at", null);
   return count ?? 0;
@@ -57,6 +79,7 @@ export async function getPatient(db: ServerSupabase, tenantId: string, id: strin
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();
+  // Inactive people stay readable: their history must remain accessible.
   if (error) throw error;
   return data;
 }

@@ -1,8 +1,9 @@
 "use client";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, HeartPulse, Loader2, ShoppingBag, UsersRound } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { DatePicker } from "@/components/shared/date-picker";
@@ -15,20 +16,39 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DEPARTMENTS, municipalitiesOf } from "@/lib/divipola";
 import { cn } from "@/lib/utils";
-import { createPatientAction, updatePatientAction } from "../actions";
+import { createPatientAction, findPersonMatchesAction, updatePatientAction, type PersonMatch } from "../actions";
 import {
-  CONTACT_PREFERENCES, DOCUMENT_TYPES, HEALTH_REGIMES, PATIENT_SOURCES, patientSchema,
-  type PatientFormInput, type PatientInput,
+  CONTACT_PREFERENCES, DOCUMENT_TYPES, HEALTH_REGIMES, PATIENT_SOURCES, patientSchema, RELATION_DESCRIPTIONS, RELATIONS,
+  type PatientFormInput, type PatientInput, type Relation,
 } from "../schemas";
 
 const DEPARTMENT_OPTIONS = DEPARTMENTS.map((d) => ({ value: d.name, label: d.name }));
 
 const EMPTY: PatientFormInput = {
-  documentType: "CC", documentNumber: "", firstName: "", middleName: "", lastName: "", secondLastName: "", birthDate: "",
+  relation: "customer", documentType: "CC", documentNumber: "", firstName: "", middleName: "", lastName: "", secondLastName: "", birthDate: "",
   sex: "", email: "", phone: "", whatsapp: "", address: "", city: "", department: "", occupation: "", eps: "", healthRegime: "",
   emergencyContactName: "", emergencyContactPhone: "", contactPreference: "whatsapp", source: "", homeBranchId: "", notes: "",
   acceptDataPolicy: true, acceptMarketing: false,
 };
+
+const RELATION_ICONS: Record<Relation, typeof ShoppingBag> = { customer: ShoppingBag, patient: HeartPulse, both: UsersRound };
+const MATCH_REASONS: Record<string, string> = {
+  document: "mismo documento", document_number: "mismo número con otro tipo", name: "mismo nombre", phone: "mismo teléfono", email: "mismo correo",
+};
+
+/** Debounced lookup of possible duplicates (server-side, same company only). */
+function usePersonMatches(values: { documentType: string; documentNumber: string; firstName: string; lastName: string; birthDate?: string | null; phone?: string | null; email?: string | null }, excludeId?: string) {
+  const [matches, setMatches] = useState<PersonMatch[]>([]);
+  const key = JSON.stringify(values);
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      const v = JSON.parse(key) as typeof values;
+      setMatches(await findPersonMatchesAction({ ...v, birthDate: v.birthDate ?? undefined, phone: v.phone ?? undefined, email: v.email ?? undefined, excludeId }));
+    }, 450);
+    return () => clearTimeout(t);
+  }, [key, excludeId]);
+  return matches;
+}
 
 function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   return (
@@ -53,13 +73,20 @@ export function PatientForm({ patientId, defaults, branches }: {
   });
   const { errors } = form.formState;
   const reg = form.register;
-  const [acceptDataPolicy, acceptMarketing, department, city] = useWatch({
-    control: form.control, name: ["acceptDataPolicy", "acceptMarketing", "department", "city"],
+  const [acceptDataPolicy, acceptMarketing, department, city, relation] = useWatch({
+    control: form.control, name: ["acceptDataPolicy", "acceptMarketing", "department", "city", "relation"],
   });
+  const [documentType, documentNumber, firstName, lastName, birthDate, phoneValue, emailValue] = useWatch({
+    control: form.control, name: ["documentType", "documentNumber", "firstName", "lastName", "birthDate", "phone", "email"],
+  });
+  const matches = usePersonMatches({ documentType, documentNumber, firstName, lastName, birthDate, phone: phoneValue, email: emailValue }, patientId);
+  const sameDocument = matches.find((m) => m.reasons.includes("document"));
+  const isPatient = relation !== "customer";
   const err = (k: keyof PatientFormInput) => errors[k]?.message as string | undefined;
   const cityOptions = useMemo(() => municipalitiesOf(department).map((m) => ({ value: m.name, label: m.name })), [department]);
 
   const onSubmit = form.handleSubmit((_values, event) => {
+    if (pending) return;
     const raw = form.getValues();
     startTransition(async () => {
       const res = patientId ? await updatePatientAction(patientId, raw) : await createPatientAction(raw);
@@ -78,7 +105,25 @@ export function PatientForm({ patientId, defaults, branches }: {
   });
 
   return (
-    <form onSubmit={onSubmit} noValidate className="rounded-xl border bg-surface p-6 shadow-soft sm:p-8">
+    <form onSubmit={onSubmit} noValidate className="rounded-2xl border bg-surface p-6 shadow-soft sm:p-8">
+      <Section title="Tipo de registro" description="Una persona tiene un solo registro, aunque compre y también reciba atención.">
+        <div role="radiogroup" aria-label="Tipo de registro" className="grid gap-3 sm:grid-cols-3">
+          {(Object.keys(RELATIONS) as Relation[]).map((r) => {
+            const Icon = RELATION_ICONS[r];
+            const selected = relation === r;
+            return (
+              <button key={r} type="button" role="radio" aria-checked={selected} onClick={() => form.setValue("relation", r, { shouldDirty: true, shouldValidate: form.formState.isSubmitted })}
+                className={cn("flex flex-col gap-1.5 rounded-xl border p-4 text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
+                  selected ? "border-brand bg-brand-soft/60 ring-1 ring-brand" : "hover:border-foreground/20")}>
+                <span className="flex items-center gap-2 text-sm font-medium"><Icon className={cn("size-4", selected ? "text-brand" : "text-muted-foreground")} />{RELATIONS[r]}</span>
+                <span className="text-xs text-muted-foreground">{RELATION_DESCRIPTIONS[r]}</span>
+              </button>
+            );
+          })}
+        </div>
+        {err("relation") && <p role="alert" className="text-sm text-destructive">{err("relation")}</p>}
+      </Section>
+
       <Section title="Identificación" description="El documento debe ser único en tu óptica.">
         <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
           <FormField id="documentType" label="Tipo de documento">
@@ -96,23 +141,46 @@ export function PatientForm({ patientId, defaults, branches }: {
           <FormField id="lastName" label="Primer apellido" error={err("lastName")}><Input id="lastName" aria-invalid={!!errors.lastName} {...reg("lastName")} /></FormField>
           <FormField id="secondLastName" label="Segundo apellido" optional><Input id="secondLastName" {...reg("secondLastName")} /></FormField>
         </div>
+        {matches.length > 0 && (
+          <div role="status" className={cn("grid gap-2 rounded-xl border p-3 text-sm", sameDocument ? "border-destructive/40 bg-danger-soft" : "border-warning/40 bg-warning-soft")}>
+            <p className="flex items-center gap-2 font-medium">
+              <AlertTriangle className={cn("size-4", sameDocument ? "text-destructive" : "text-[oklch(0.5_0.12_60)]")} />
+              {sameDocument ? "Esta persona ya está registrada." : "Posibles coincidencias: revisa antes de crear un registro nuevo."}
+            </p>
+            <ul className="grid gap-1.5">
+              {matches.map((m) => (
+                <li key={m.id} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0">
+                    <span className="font-medium">{m.full_name}</span>
+                    <span className="text-muted-foreground tabular"> · {m.document_type} {m.document_number}{!m.is_active ? " · inactivo" : ""}</span>
+                    <span className="block text-xs text-muted-foreground">Coincide: {m.reasons.map((r) => MATCH_REASONS[r] ?? r).join(", ")}</span>
+                  </span>
+                  <Link href={`/pacientes/${m.id}`} target="_blank" className="text-xs font-medium text-brand hover:underline">Ver registro</Link>
+                </li>
+              ))}
+            </ul>
+            {!sameDocument && <p className="text-xs text-muted-foreground">Compartir teléfono o correo es normal en familias: puedes continuar si es otra persona.</p>}
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField id="birthDate" label="Fecha de nacimiento" error={err("birthDate")}>
+          <FormField id="birthDate" label="Fecha de nacimiento" error={err("birthDate")} optional={!isPatient} hint={isPatient ? undefined : "Opcional para clientes."}>
             <Controller control={form.control} name="birthDate" render={({ field }) => (
               <DatePicker id="birthDate" value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} invalid={!!errors.birthDate} />
             )} />
           </FormField>
-          <FormField id="sex" label="Sexo biológico" hint="Requerido para RIPS y uso clínico." optional>
-            <NativeSelect id="sex" {...reg("sex")}>
-              <option value="">Sin especificar</option><option value="F">Femenino</option><option value="M">Masculino</option><option value="I">Indeterminado</option>
-            </NativeSelect>
-          </FormField>
+          {isPatient && (
+            <FormField id="sex" label="Sexo biológico" hint="Requerido para RIPS y uso clínico." optional>
+              <NativeSelect id="sex" {...reg("sex")}>
+                <option value="">Sin especificar</option><option value="F">Femenino</option><option value="M">Masculino</option><option value="I">Indeterminado</option>
+              </NativeSelect>
+            </FormField>
+          )}
         </div>
       </Section>
 
-      <Section title="Contacto" description="Lo usaremos para confirmaciones y avisos de entrega.">
+      <Section title="Contacto" description="Opcional. Lo usaremos para confirmaciones y avisos de entrega.">
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField id="phone" label="Celular" error={err("phone")}><Input id="phone" type="tel" placeholder="300 123 4567" {...reg("phone")} /></FormField>
+          <FormField id="phone" label="Celular" error={err("phone")} optional><Input id="phone" type="tel" placeholder="300 123 4567" {...reg("phone")} /></FormField>
           <FormField id="email" label="Correo" error={err("email")} optional><Input id="email" type="email" {...reg("email")} /></FormField>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -159,24 +227,29 @@ export function PatientForm({ patientId, defaults, branches }: {
           </FormField>
         )}
       </Section>
-      <Section title="Salud" description="Información de aseguramiento.">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField id="eps" label="EPS" optional><Input id="eps" {...reg("eps")} /></FormField>
-          <FormField id="healthRegime" label="Régimen" optional>
-            <NativeSelect id="healthRegime" {...reg("healthRegime")}>
-              <option value="">—</option>
-              {Object.entries(HEALTH_REGIMES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </NativeSelect>
-          </FormField>
-        </div>
-        <FormField id="notes" label="Notas internas" optional><Textarea id="notes" rows={3} {...reg("notes")} /></FormField>
+      {isPatient && (
+        <Section title="Aseguramiento" description="Datos administrativos para RIPS. Diagnósticos y fórmulas se registran en la consulta, no aquí.">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField id="eps" label="EPS" optional><Input id="eps" {...reg("eps")} /></FormField>
+            <FormField id="healthRegime" label="Régimen" optional>
+              <NativeSelect id="healthRegime" {...reg("healthRegime")}>
+                <option value="">—</option>
+                {Object.entries(HEALTH_REGIMES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </NativeSelect>
+            </FormField>
+          </div>
+        </Section>
+      )}
+
+      <Section title="Notas internas" description="Visibles para tu equipo. No escribas datos clínicos.">
+        <FormField id="notes" label="Notas" optional><Textarea id="notes" rows={3} {...reg("notes")} /></FormField>
       </Section>
 
       {!patientId && (
         <div className="grid gap-3 rounded-lg bg-muted/60 p-4">
           <label className="flex items-start gap-2.5 text-sm">
             <Checkbox checked={acceptDataPolicy} onCheckedChange={(v) => form.setValue("acceptDataPolicy", v === true)} className="mt-0.5" />
-            <span>El paciente autoriza el <b>tratamiento de sus datos personales</b> según la política vigente (Ley 1581 de 2012).</span>
+            <span>La persona autoriza el <b>tratamiento de sus datos personales</b> según la política vigente (Ley 1581 de 2012).</span>
           </label>
           <label className="flex items-start gap-2.5 text-sm">
             <Checkbox checked={acceptMarketing} onCheckedChange={(v) => form.setValue("acceptMarketing", v === true)} className="mt-0.5" />
@@ -187,8 +260,8 @@ export function PatientForm({ patientId, defaults, branches }: {
 
       <div className={cn("flex flex-col-reverse gap-2 pt-6 sm:flex-row sm:justify-end")}>
         <Button type="button" variant="ghost" onClick={() => router.back()}>Cancelar</Button>
-        {!patientId && <Button type="submit" variant="outline" data-next="agenda" disabled={pending}>Guardar y agendar cita</Button>}
-        <Button type="submit" disabled={pending}>{pending && <Loader2 className="animate-spin" />}{patientId ? "Guardar cambios" : "Crear paciente"}</Button>
+        {!patientId && isPatient && <Button type="submit" variant="outline" data-next="agenda" disabled={pending || !!sameDocument}>Guardar y agendar cita</Button>}
+        <Button type="submit" disabled={pending || !!sameDocument}>{pending && <Loader2 className="animate-spin" />}{patientId ? "Guardar cambios" : "Crear registro"}</Button>
       </div>
     </form>
   );

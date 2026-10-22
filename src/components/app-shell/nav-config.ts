@@ -30,7 +30,7 @@ export const NAV_GROUPS: NavGroup[] = [
       {
         href: "/pacientes", label: "Clientes y pacientes", icon: UsersRound, permission: "patients.read",
         children: [
-          { href: "/pacientes", label: "Pacientes", permission: "patients.read" },
+          { href: "/pacientes", label: "Directorio", permission: "patients.read" },
           { href: "/crm", label: "Seguimiento (CRM)", permission: "crm.read" },
         ],
       },
