@@ -6,7 +6,7 @@ import {
   CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator,
 } from "@/components/ui/command";
 import { globalSearchAction, type SearchHit } from "@/modules/search/actions";
-import { NAV_ADMIN, NAV_MAIN } from "./nav-config";
+import { NAV_PAGES } from "./nav-config";
 import { useShell } from "./shell-context";
 import { UNIVERSAL_ACTIONS } from "./universal-action";
 
@@ -47,7 +47,7 @@ export function CommandBar() {
   const visibleHits = query.trim().length < 2 ? [] : hits;
 
   const go = (href: string) => { setOpen(false); setQuery(""); router.push(href); };
-  const pages = [...NAV_MAIN, ...NAV_ADMIN].filter((i) => shell.can(i.permission));
+  const pages = NAV_PAGES.filter((i) => shell.can(i.permission));
   const actions = UNIVERSAL_ACTIONS.filter((a) => shell.can(a.permission));
 
   return (

@@ -168,7 +168,7 @@ run("invitations", () => {
       { commit: true });
     await asUser(db, owner, () => db.query(
       `insert into public.invitations (tenant_id, email, role_id, token_hash, invited_by)
-       select $1, $2, id, $3, auth.uid() from public.roles where code = 'RECEPTIONIST' and tenant_id is null`,
+       select $1, $2, id, $3, auth.uid() from public.roles where code = 'SALES_REP' and tenant_id is null`,
       [tenant, `invitee-${suffix}@test.dev`, hash]), { commit: true });
   });
   afterAll(async () => { await db?.end(); });
@@ -184,6 +184,13 @@ run("invitations", () => {
       (await db.query<{ permission_code: string }>(`select permission_code from public.my_permissions($1)`, [tenant])).rows.map((r) => r.permission_code));
     expect(perms).toContain("appointments.create");
     expect(perms).not.toContain("settings.manage");
+  });
+
+  it("solo se puede invitar con los roles Administrador o Asesor comercial", async () => {
+    const msg = await expectDenied(db, owner,
+      `insert into public.invitations (tenant_id, email, role_id, token_hash, invited_by)
+       select $1, 'otro@test.dev', id, 'x', auth.uid() from public.roles where code = 'RECEPTIONIST' and tenant_id is null`, [tenant]);
+    expect(msg).toMatch(/ROLE_NOT_ASSIGNABLE/);
   });
 
   it("una invitación no se puede reutilizar", async () => {

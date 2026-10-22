@@ -28,8 +28,9 @@ export async function inviteMemberAction(input: z.input<typeof inviteSchema>): P
 
   const token = randomBytes(24).toString("base64url");
   const db = await createClient();
-  const { data: role } = await db.from("roles").select("code").eq("id", parsed.data.roleId).single();
-  if (role?.code === "OWNER" && !ctx.roles.some((r) => r.code === "OWNER")) return fail("Solo un propietario puede invitar a otro propietario.");
+  const { data: role } = await db.from("roles").select("code, is_assignable").eq("id", parsed.data.roleId).single();
+  if (!role?.is_assignable) return fail("Ese rol no está disponible. Elige Administrador o Asesor comercial.");
+  if (role?.code === "OWNER" && !ctx.roles.some((r) => r.code === "OWNER")) return fail("Solo un administrador puede invitar a otro administrador.");
 
   const { error } = await db.from("invitations").insert({
     tenant_id: ctx.tenant.id, email: parsed.data.email, role_id: parsed.data.roleId, branch_id: parsed.data.branchId,

@@ -21,7 +21,7 @@ export default async function TeamPage() {
   const [members, userRoles, roles, invitations] = await Promise.all([
     db.from("tenant_members").select("user_id, status, job_title, joined_at, profile:profiles!tenant_members_user_id_fkey(full_name, email)").eq("tenant_id", ctx.tenant.id).order("created_at"),
     db.from("user_roles").select("user_id, branch_id, role:roles(name)").eq("tenant_id", ctx.tenant.id),
-    db.from("roles").select("id, name, code").or(`tenant_id.is.null,tenant_id.eq.${ctx.tenant.id}`).order("name"),
+    db.from("roles").select("id, name, code").or(`tenant_id.is.null,tenant_id.eq.${ctx.tenant.id}`).eq("is_assignable", true).order("name"),
     canManage
       ? db.from("invitations").select("id, email, status, expires_at, role:roles(name)").eq("tenant_id", ctx.tenant.id).eq("status", "pending").order("created_at", { ascending: false })
       : Promise.resolve({ data: [] as { id: string; email: string; status: string; expires_at: string; role: { name: string } | null }[] }),
@@ -38,7 +38,7 @@ export default async function TeamPage() {
   return (
     <>
       <PageHeader title="Equipo" description={`${active} usuarios activos`}
-        actions={canManage && <InviteDialog roles={(roles.data ?? []).filter((r) => r.code !== "PATIENT")} branches={ctx.branches} />} />
+        actions={canManage && <InviteDialog roles={roles.data ?? []} branches={ctx.branches} />} />
       <div className="grid gap-6">
         <Panel bodyClassName="p-0">
           <ul className="divide-y">

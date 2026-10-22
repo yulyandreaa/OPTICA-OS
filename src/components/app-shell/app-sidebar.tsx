@@ -10,26 +10,24 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { switchTenantAction } from "@/modules/tenants/actions";
-import { NAV_ADMIN, NAV_MAIN, NAV_PLATFORM, type NavItem } from "./nav-config";
+import { NAV_GROUPS, NAV_PLATFORM, type NavItem, type NavLeaf } from "./nav-config";
 import { useShell } from "./shell-context";
 
 export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const shell = useShell();
-  const main = NAV_MAIN.filter((i) => shell.can(i.permission));
-  const admin = NAV_ADMIN.filter((i) => shell.can(i.permission));
+  const groups = NAV_GROUPS
+    .map((g) => ({ ...g, items: g.items.filter((i) => shell.can(i.permission)) }))
+    .filter((g) => g.items.length > 0);
 
   return (
     <div className="flex h-full flex-col gap-4 px-3 py-3">
       <TenantSwitcher />
-      <nav aria-label="Principal" className="grid gap-0.5">
-        {main.map((item) => <NavLink key={item.href} item={item} onNavigate={onNavigate} />)}
-      </nav>
-      {admin.length > 0 && (
-        <nav aria-label="Administración" className="grid gap-0.5">
-          <p className="px-2.5 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Administración</p>
-          {admin.map((item) => <NavLink key={item.href} item={item} onNavigate={onNavigate} />)}
+      {groups.map((g) => (
+        <nav key={g.label ?? "main"} aria-label={g.label ?? "Principal"} className="grid gap-0.5">
+          {g.label && <p className="px-2.5 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{g.label}</p>}
+          {g.items.map((item) => <NavSection key={item.href} item={item} onNavigate={onNavigate} />)}
         </nav>
-      )}
+      ))}
       <div className="mt-auto grid gap-2">
         {shell.user.isPlatformAdmin && <NavLink item={NAV_PLATFORM} onNavigate={onNavigate} />}
         {shell.trialDaysLeft !== null && (
@@ -46,9 +44,47 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function NavLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
+const matches = (pathname: string, href: string) => pathname === href || pathname.startsWith(`${href}/`);
+
+/** The deepest leaf matching the path wins, so /ventas/pos highlights "Punto de venta" and not "Ventas". */
+function activeLeaf(pathname: string, leaves: NavLeaf[]) {
+  return leaves.filter((l) => matches(pathname, l.href)).sort((a, b) => b.href.length - a.href.length)[0]?.href;
+}
+
+function NavSection({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
+  const shell = useShell();
   const pathname = usePathname();
-  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const children = (item.children ?? []).filter((c) => shell.can(c.permission));
+  const open = matches(pathname, item.href) || children.some((c) => matches(pathname, c.href));
+  const current = activeLeaf(pathname, children);
+  return (
+    <>
+      <NavLink item={item} onNavigate={onNavigate} active={open} />
+      {open && children.length > 1 && (
+        <div className="ml-[18px] grid gap-0.5 border-l py-0.5 pl-2">
+          {children.map((c) => (
+            <Link
+              key={c.href}
+              href={c.href}
+              onClick={onNavigate}
+              aria-current={c.href === current ? "page" : undefined}
+              className={cn(
+                "flex h-7 items-center rounded-md px-2 text-[13px] transition-colors",
+                c.href === current ? "font-medium text-foreground" : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+              )}
+            >
+              <span className="truncate">{c.label}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function NavLink({ item, onNavigate, active: forced }: { item: NavItem; onNavigate?: () => void; active?: boolean }) {
+  const pathname = usePathname();
+  const active = forced ?? matches(pathname, item.href);
   return (
     <Link
       href={item.href}

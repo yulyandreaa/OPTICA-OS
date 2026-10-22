@@ -55,7 +55,7 @@ export function InviteDialog({ roles, branches }: { roles: { id: string; name: s
             {error && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-destructive">{error}</p>}
             <FormField id="email" label="Correo"><Input id="email" name="email" type="email" required placeholder="nombre@optica.com" /></FormField>
             <FormField id="roleId" label="Rol">
-              <NativeSelect id="roleId" name="roleId" defaultValue={roles.find((r) => r.code === "RECEPTIONIST")?.id}>
+              <NativeSelect id="roleId" name="roleId" defaultValue={roles.find((r) => r.code === "SALES_REP")?.id}>
                 {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </NativeSelect>
             </FormField>

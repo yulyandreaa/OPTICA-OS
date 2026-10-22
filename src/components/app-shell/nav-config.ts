@@ -1,37 +1,74 @@
 import {
-  BarChart3, Boxes, CalendarDays, ClipboardList, FileText, FlaskConical, Home, Kanban, Receipt,
-  Settings, ShieldCheck, ShoppingBag, Stethoscope, Truck, Users, UsersRound, type LucideIcon,
+  CalendarDays, ChartNoAxesCombined, ClipboardList, Glasses, LayoutDashboard, Package, Settings, ShieldCheck,
+  ShoppingCart, Stethoscope, Users, UsersRound, Wallet, type LucideIcon,
 } from "lucide-react";
 import type { Permission } from "@/modules/authz/permissions";
 
-export interface NavItem {
+export interface NavLeaf {
   href: string;
   label: string;
-  icon: LucideIcon;
   permission: Permission;
-  /** Roadmap phase in which the module ships; omitted = available now. */
-  phase?: number;
 }
 
-export const NAV_MAIN: NavItem[] = [
-  { href: "/inicio", label: "Inicio", icon: Home, permission: "dashboard.view" },
-  { href: "/pacientes", label: "Pacientes", icon: UsersRound, permission: "patients.read" },
-  { href: "/agenda", label: "Agenda", icon: CalendarDays, permission: "appointments.read" },
-  { href: "/consultas", label: "Consultas", icon: Stethoscope, permission: "medical_records.read" },
-  { href: "/ventas", label: "Ventas", icon: ShoppingBag, permission: "sales.read" },
-  { href: "/cotizaciones", label: "Cotizaciones", icon: FileText, permission: "quotes.read" },
-  { href: "/ordenes", label: "Órdenes", icon: FlaskConical, permission: "lab_orders.read" },
-  { href: "/inventario", label: "Inventario", icon: Boxes, permission: "inventory.read" },
-  { href: "/compras", label: "Compras", icon: Truck, permission: "purchases.read" },
-  { href: "/crm", label: "CRM", icon: Kanban, permission: "crm.read" },
-  { href: "/reportes", label: "Reportes", icon: BarChart3, permission: "reports.read" },
+export interface NavItem extends NavLeaf {
+  icon: LucideIcon;
+  /** Roadmap phase in which the module ships; omitted = available now. */
+  phase?: number;
+  /** Sub-pages shown under the item while its section is open. */
+  children?: NavLeaf[];
+}
+
+export interface NavGroup {
+  label?: string;
+  items: NavItem[];
+}
+
+export const NAV_GROUPS: NavGroup[] = [
+  {
+    items: [
+      { href: "/inicio", label: "Dashboard", icon: LayoutDashboard, permission: "dashboard.view" },
+      {
+        href: "/pacientes", label: "Clientes y pacientes", icon: UsersRound, permission: "patients.read",
+        children: [
+          { href: "/pacientes", label: "Pacientes", permission: "patients.read" },
+          { href: "/crm", label: "Seguimiento (CRM)", permission: "crm.read" },
+        ],
+      },
+      {
+        href: "/inventario", label: "Inventario", icon: Package, permission: "inventory.read",
+        children: [
+          { href: "/inventario", label: "Productos y stock", permission: "inventory.read" },
+          { href: "/compras", label: "Compras y proveedores", permission: "purchases.read" },
+        ],
+      },
+      {
+        href: "/ventas", label: "Ventas y cotizaciones", icon: ShoppingCart, permission: "sales.read",
+        children: [
+          { href: "/ventas", label: "Ventas", permission: "sales.read" },
+          { href: "/ventas/pos", label: "Punto de venta", permission: "pos.use" },
+          { href: "/cotizaciones", label: "Cotizaciones", permission: "quotes.read" },
+          { href: "/facturacion", label: "Facturación", permission: "billing.read" },
+        ],
+      },
+      { href: "/caja", label: "Caja y cartera", icon: Wallet, permission: "cash.manage", phase: 1 },
+      { href: "/ordenes", label: "Órdenes ópticas", icon: Glasses, permission: "lab_orders.read" },
+      { href: "/reportes", label: "Reportes", icon: ChartNoAxesCombined, permission: "reports.read" },
+      { href: "/equipo", label: "Equipo y permisos", icon: Users, permission: "team.read" },
+      { href: "/configuracion", label: "Configuración", icon: Settings, permission: "settings.manage" },
+    ],
+  },
+  {
+    label: "Atención clínica",
+    items: [
+      { href: "/agenda", label: "Agenda", icon: CalendarDays, permission: "appointments.read" },
+      { href: "/consultas", label: "Consultas e historia clínica", icon: Stethoscope, permission: "medical_records.read" },
+      { href: "/rips", label: "RIPS", icon: ClipboardList, permission: "rips.read" },
+    ],
+  },
 ];
 
-export const NAV_ADMIN: NavItem[] = [
-  { href: "/facturacion", label: "Facturación", icon: Receipt, permission: "billing.read" },
-  { href: "/rips", label: "RIPS", icon: ClipboardList, permission: "rips.read" },
-  { href: "/equipo", label: "Equipo", icon: Users, permission: "team.read" },
-  { href: "/configuracion", label: "Configuración", icon: Settings, permission: "settings.manage" },
-];
+/** Every navigable page (sections and their sub-pages), for the command bar. */
+export const NAV_PAGES: NavItem[] = NAV_GROUPS.flatMap((g) => g.items).flatMap((item) =>
+  item.children ? item.children.map((c) => ({ ...c, icon: item.icon })) : [item]);
 
 export const NAV_PLATFORM: NavItem = { href: "/admin", label: "Super admin", icon: ShieldCheck, permission: "dashboard.view" };

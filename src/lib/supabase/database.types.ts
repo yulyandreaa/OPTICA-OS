@@ -2000,6 +2000,7 @@ export type Database = {
           description: string | null
           is_system: boolean
           created_at: string
+          is_assignable: boolean
         }
         Insert: {
           id?: string
@@ -2009,6 +2010,7 @@ export type Database = {
           description?: string | null
           is_system?: boolean
           created_at?: string
+          is_assignable?: boolean
         }
         Update: {
           id?: string
@@ -2018,6 +2020,7 @@ export type Database = {
           description?: string | null
           is_system?: boolean
           created_at?: string
+          is_assignable?: boolean
         }
         Relationships: [
           { foreignKeyName: "roles_tenant_id_fkey"; columns: ["tenant_id"]; isOneToOne: false; referencedRelation: "tenants"; referencedColumns: ["id"] }
