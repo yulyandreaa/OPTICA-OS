@@ -65,6 +65,7 @@ export const KIND_DEFAULTS: Record<Kind, { is_stocked: boolean; track_lots: bool
 export const UNITS = ["unidad", "par", "caja", "frasco", "blister"] as const;
 export type Unit = (typeof UNITS)[number];
 export const UNIT_LABEL: Record<Unit, string> = { unidad: "Unidad", par: "Par", caja: "Caja", frasco: "Frasco", blister: "Blíster" };
+export const UNIT_PLURAL: Record<Unit, string> = { unidad: "unidades", par: "pares", caja: "cajas", frasco: "frascos", blister: "blísteres" };
 
 export const TAX_RATES = [
   { value: 19, label: "IVA 19 %" }, { value: 5, label: "IVA 5 %" }, { value: 0, label: "Excluido o exento (0 %)" },

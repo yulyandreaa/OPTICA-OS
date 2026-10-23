@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { createCategoryAction, saveProductAction } from "../actions";
 import {
-  KIND_DEFAULTS, KIND_HAS_COLOR, KIND_LABEL, KINDS, PRODUCT_FIELDS, TAX_RATES, UNIT_LABEL, UNITS, VARIANT_FIELDS,
+  KIND_DEFAULTS, KIND_HAS_COLOR, KIND_LABEL, KINDS, PRODUCT_FIELDS, TAX_RATES, UNIT_LABEL, UNIT_PLURAL, UNITS, VARIANT_FIELDS,
   type Kind, type Unit,
 } from "../constants";
 import { productSchema, type ProductInput } from "../schemas";
@@ -235,6 +235,15 @@ export function ProductForm({ productId, defaults, originalCosts = {}, categorie
           )}
         </div>
         <PriceSummary price={money(main?.price ?? "")} cost={canCosts ? money(main?.cost ?? "") : undefined} taxRate={Number(taxRate)} />
+        {creating && isStocked && canAdjust && (
+          <fieldset className="grid gap-2">
+            <legend className="mb-1 text-[13px] font-medium text-foreground/80">
+              Cantidad en inventario <span className="font-normal text-muted-foreground">· opcional</span>
+            </legend>
+            <p className="text-xs text-muted-foreground">Las {UNIT_PLURAL[unit]} que tienes hoy en cada sede. Queda registrado como carga inicial; después la cantidad solo cambia con ventas y movimientos.</p>
+            <InitialStock control={control} register={register} err={err} branches={branches} trackLots={trackLots} unit={unit} />
+          </fieldset>
+        )}
         {(err("variants") || err("variants.0.sku") || err("variants.0.barcode")) && (
           <p role="alert" className="text-xs text-destructive">{err("variants") ?? err("variants.0.sku") ?? err("variants.0.barcode")}</p>
         )}
@@ -275,12 +284,6 @@ export function ProductForm({ productId, defaults, originalCosts = {}, categorie
           </label>
         )} />
       </FormSection>
-
-      {creating && isStocked && canAdjust && (
-        <FormSection title="Existencias iniciales" description="Opcional. Se registran como movimientos de carga inicial con tu usuario, la fecha y la sede. Después, el stock solo cambia con movimientos.">
-          <InitialStock control={control} register={register} err={err} branches={branches} trackLots={trackLots} unit={unit} />
-        </FormSection>
-      )}
 
       <div className="flex flex-col-reverse gap-2 pt-6 sm:flex-row sm:justify-end">
         <Button type="button" variant="ghost" onClick={() => router.back()}>Cancelar</Button>
@@ -354,7 +357,7 @@ function InitialStock({ control, register, err, branches, trackLots, unit }: {
           );
         })}
       </div>
-      <p className="text-xs text-muted-foreground tabular">{total > 0 ? `Se registrarán ${total} ${UNIT_LABEL[unit].toLowerCase()}${total === 1 ? "" : "s"} como carga inicial.` : "Deja en blanco las sedes sin existencias."}</p>
+      <p className="text-xs text-muted-foreground tabular">{total > 0 ? `Se registrarán ${total} ${total === 1 ? UNIT_LABEL[unit].toLowerCase() : UNIT_PLURAL[unit]} como carga inicial.` : "Deja en blanco las sedes sin existencias."}</p>
     </div>
   );
 }

@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { can } from "@/modules/authz/permissions";
 import {
-  EXPIRY_WINDOW_DAYS, formatDay, formatQty, KIND_LABEL, PRODUCT_FIELDS, TAX_RATES, UNIT_LABEL, VARIANT_FIELDS, variantLabel, type Unit,
+  EXPIRY_WINDOW_DAYS, formatDay, formatQty, KIND_LABEL, PRODUCT_FIELDS, TAX_RATES, UNIT_LABEL, UNIT_PLURAL, VARIANT_FIELDS, variantLabel, type Unit,
 } from "@/modules/inventory/constants";
 import { MinStockEditor } from "@/modules/inventory/components/min-stock-editor";
 import { MovementTable } from "@/modules/inventory/components/movement-table";
@@ -60,7 +60,7 @@ export default async function ProductPage(props: PageProps<"/inventario/[id]">) 
             </div>
             <p className="text-sm text-muted-foreground">
               {[product.category.name, product.brand?.name, product.model].filter(Boolean).join(" · ")}
-              {product.is_stocked && <> · <span className="tabular">{formatQty(total)}</span> {UNIT_LABEL[product.unit as Unit]?.toLowerCase()}{total === 1 ? "" : "s"} en tus sedes</>}
+              {product.is_stocked && <> · <span className="tabular">{formatQty(total)}</span> {total === 1 ? UNIT_LABEL[product.unit as Unit]?.toLowerCase() : UNIT_PLURAL[product.unit as Unit]} en tus sedes</>}
             </p>
           </div>
         </div>
