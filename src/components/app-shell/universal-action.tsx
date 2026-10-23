@@ -9,7 +9,7 @@ export const UNIVERSAL_ACTIONS = [
   { label: "Paciente", href: "/pacientes/nuevo", icon: UserPlus, permission: "patients.create", shortcut: "P" },
   { label: "Cita", href: "/agenda?nueva=1", icon: CalendarPlus, permission: "appointments.create", shortcut: "C" },
   { label: "Consulta", href: "/consultas", icon: ClipboardPlus, permission: "medical_records.create" },
-  { label: "Venta", href: "/ventas/pos", icon: ShoppingCart, permission: "pos.use", shortcut: "V" },
+  { label: "Venta", href: "/ventas/nueva", icon: ShoppingCart, permission: "sales.create", shortcut: "V" },
   { label: "Cotización", href: "/cotizaciones/nueva", icon: FilePlus2, permission: "quotes.create" },
   { label: "Compra", href: "/compras/nueva", icon: Truck, permission: "purchases.create" },
   { label: "Orden de laboratorio", href: "/ordenes", icon: FlaskConical, permission: "lab_orders.create" },

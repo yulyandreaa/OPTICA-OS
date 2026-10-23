@@ -42,7 +42,7 @@ export default async function SalesPage(props: PageProps<"/ventas">) {
       <PageHeader title="Ventas y cotizaciones" description="Gestiona tus ventas, prepara cotizaciones y consulta el historial comercial"
         actions={<>
           {can(ctx.grants, "quotes.create") && <Link href="/cotizaciones/nueva" className={buttonVariants({ variant: "outline" })}><FilePlus2 /> Nueva cotización</Link>}
-          {can(ctx.grants, "sales.create") && <Link href="/ventas/pos" className={buttonVariants()}><Plus /> Nueva venta</Link>}
+          {can(ctx.grants, "sales.create") && <Link href="/ventas/nueva" className={buttonVariants()}><Plus /> Nueva venta</Link>}
         </>} />
       <div className="-mt-2 flex flex-wrap items-center gap-2">
         <PeriodFilter value={period.key} from={period.from} to={period.to} keepParams />
@@ -139,7 +139,7 @@ async function OperationsList({ ctx, params, period, branchId, periodQuery }: {
             action={params.tab !== "anulaciones" && (
               <div className="flex flex-wrap justify-center gap-2">
                 {params.tab !== "ventas" && can(ctx.grants, "quotes.create") && <Link href="/cotizaciones/nueva" className={buttonVariants({ variant: "outline", size: "sm" })}><FilePlus2 /> Nueva cotización</Link>}
-                {params.tab !== "cotizaciones" && can(ctx.grants, "sales.create") && <Link href="/ventas/pos" className={buttonVariants({ size: "sm" })}><Plus /> Nueva venta</Link>}
+                {params.tab !== "cotizaciones" && can(ctx.grants, "sales.create") && <Link href="/ventas/nueva" className={buttonVariants({ size: "sm" })}><Plus /> Nueva venta</Link>}
               </div>
             )} />
         )}
@@ -241,7 +241,7 @@ async function OperationsList({ ctx, params, period, branchId, periodQuery }: {
   );
 }
 
-const hrefOf = (r: OperationRow) => (r.kind === "sale" ? `/ventas/${r.id}` : `/cotizaciones/${r.id}`);
+const hrefOf = (r: OperationRow) => (r.kind === "quote" ? `/cotizaciones/${r.id}` : r.status === "draft" ? `/ventas/nueva?borrador=${r.id}` : `/ventas/${r.id}`);
 
 /** Commercial status only: what happened to the sale or quote (never mixed with payment or lab status). */
 function CommercialBadge({ r }: { r: OperationRow }) {
@@ -255,6 +255,7 @@ function PaymentCell({ r, tz }: { r: OperationRow; tz: string }) {
     if (!r.valid_until || ["converted", "rejected", "expired"].includes(r.status)) return <span className="text-xs text-muted-foreground">—</span>;
     return <span className="text-xs text-muted-foreground">Vence {formatDate(`${r.valid_until}T12:00:00`, tz, { day: "numeric", month: "short" })}</span>;
   }
+  if (r.status === "draft") return <span className="text-xs text-muted-foreground">Sin confirmar</span>;
   if (r.status === "voided" || r.status === "returned") {
     return r.payment_status === "pending" ? <span className="text-xs text-muted-foreground">—</span> : <StatusBadge tone={PAYMENT_STATUS[r.payment_status!]?.tone}>{PAYMENT_STATUS[r.payment_status!]?.label}</StatusBadge>;
   }

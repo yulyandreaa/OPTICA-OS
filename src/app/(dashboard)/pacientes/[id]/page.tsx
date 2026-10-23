@@ -111,7 +111,7 @@ export default async function PatientPage(props: PageProps<"/pacientes/[id]">) {
           {can(ctx.grants, "patients.update") && <Link href={`/pacientes/${id}/editar`} className={buttonVariants({ variant: "outline" })}><Pencil /> Editar</Link>}
           {can(ctx.grants, "patients.delete") && <PersonActiveButton id={id} name={patient.full_name} active={patient.is_active} />}
           {patient.is_active && can(ctx.grants, "quotes.create") && <Link href={`/cotizaciones/nueva?paciente=${id}`} className={buttonVariants({ variant: "outline" })}><Receipt /> Cotizar</Link>}
-          {patient.is_active && can(ctx.grants, "pos.use") && <Link href={`/ventas/pos?paciente=${id}`} className={buttonVariants({ variant: "outline" })}><ShoppingBag /> Vender</Link>}
+          {patient.is_active && can(ctx.grants, "sales.create") && <Link href={`/ventas/nueva?cliente=${id}`} className={buttonVariants({ variant: "outline" })}><ShoppingBag /> Vender</Link>}
           {patient.is_active && can(ctx.grants, "medical_records.create") && <StartConsultationButton variant="outline" patientId={id} />}
           {patient.is_active && can(ctx.grants, "appointments.create") && <Link href={`/agenda?nueva=1&paciente=${id}`} className={buttonVariants()}><CalendarPlus /> Agendar cita</Link>}
         </div>

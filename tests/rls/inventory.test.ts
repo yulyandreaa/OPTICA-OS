@@ -142,7 +142,7 @@ describe("inventario", () => {
     expect(await expectDenied(db, owner, `select public.record_movement($1)`, [{ tenant_id: tenant, branch_id: main, variant_id: lv, type: "initial", quantity: 2, notes: "Carga" }])).toMatch(/LOT_REQUIRED/);
     await movement(owner, { branch_id: main, variant_id: lv, type: "initial", quantity: 2, lot_code: "l-late", expires_on: "2030-01-01", notes: "Carga" });
     await movement(owner, { branch_id: main, variant_id: lv, type: "initial", quantity: 2, lot_code: "L-SOON", expires_on: "2028-01-01", notes: "Carga" });
-    const sale = await one<{ id: string }>(owner, `select public.create_sale($1) as id`, [{ tenant_id: tenant, branch_id: main, items: [{ variant_id: lv, quantity: 3 }], payments: [] }]);
+    const sale = await one<{ id: string }>(owner, `select public.create_sale($1) as id`, [{ tenant_id: tenant, branch_id: main, items: [{ variant_id: lv, quantity: 3 }], payments: [{ method: "cash", amount: 450000 }] }]);
     const m = await one<{ lot_allocations: { lot_code: string; quantity: number }[]; unit_cost: string }>(owner,
       `select lot_allocations, unit_cost from public.inventory_movements where reference_id = $1`, [sale.id]);
     expect(m.lot_allocations.map((a) => [a.lot_code, Number(a.quantity)])).toEqual([["L-SOON", 2], ["L-LATE", 1]]);

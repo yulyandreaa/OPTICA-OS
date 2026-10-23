@@ -15,7 +15,7 @@ export type TabKey = (typeof TABS)[number]["key"];
 export const STATUS_OPTIONS: Record<TabKey, { key: string; label: string }[]> = {
   todas: [],
   ventas: [
-    { key: "completed", label: "Registrada" }, { key: "partially_returned", label: "Devolución parcial" },
+    { key: "draft", label: "Borrador" }, { key: "completed", label: "Registrada" }, { key: "partially_returned", label: "Devolución parcial" },
     { key: "returned", label: "Devuelta" }, { key: "voided", label: "Anulada" },
   ],
   cotizaciones: [

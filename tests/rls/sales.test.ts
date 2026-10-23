@@ -140,4 +140,29 @@ describe("ventas y cotizaciones", () => {
     expect((await ops(", p_kind => 'void'")).length).toBe(0);
     expect((await ops(", p_query => $2", ["nadie-zzz"])).length).toBe(0);
   });
+
+  it("borrador: no descuenta stock ni cuenta; al confirmar se crea la venta y el borrador desaparece", async () => {
+    const stock = async () => Number((await db.query<{ q: string }>(`select quantity as q from public.inventory_levels where branch_id = $1 and variant_id = $2`, [branch, frame])).rows[0]!.q);
+    await one(owner, `select public.record_movement($1) as id`, [{ tenant_id: tenant, branch_id: branch, variant_id: frame, type: "adjustment", quantity: 2, notes: "Reposición para la prueba" }]);
+    const before = await stock();
+    const draft = (await one<{ id: string }>(seller, `select public.save_sale_draft($1) as id`, [{ tenant_id: tenant, branch_id: branch, patient_id: patient, items: [{ variant_id: frame, quantity: 1 }] }])).id;
+    const d = await row<{ status: string; number: string; total: string }>("sales", draft, "status, number, total");
+    expect(d.status).toBe("draft");
+    expect(d.number).toMatch(/^BOR-/);
+    expect(await stock()).toBe(before);
+    expect(await expectDenied(db, seller, `select public.add_sale_payment($1, $2)`, [draft, [{ method: "cash", amount: 1000 }]])).toMatch(/SALE_IS_DRAFT/);
+    await one(seller, `select public.save_sale_draft($1) as id`, [{ tenant_id: tenant, id: draft, branch_id: branch, patient_id: patient, items: [{ variant_id: frame, quantity: 1 }, { variant_id: service, quantity: 1 }] }]);
+    expect(Number((await row<{ total: string }>("sales", draft, "total")).total)).toBe(350000);
+
+    const key = `confirm-${suffix}`;
+    const payload = { tenant_id: tenant, branch_id: branch, patient_id: patient, draft_id: draft, idempotency_key: key,
+      items: [{ variant_id: frame, quantity: 1 }, { variant_id: service, quantity: 1 }], payments: [{ method: "cash", amount: 50000 }] };
+    const saleId = (await one<{ id: string }>(seller, `select public.create_sale($1) as id`, [payload])).id;
+    expect((await one<{ id: string }>(seller, `select public.create_sale($1) as id`, [payload])).id).toBe(saleId);
+    expect((await db.query(`select 1 from public.sales where id = $1`, [draft])).rowCount).toBe(0);
+    const s = await row<{ status: string; number: string; payment_status: string }>("sales", saleId, "status, number, payment_status");
+    expect(s).toMatchObject({ status: "completed", payment_status: "partial" });
+    expect(s.number).toMatch(/^V-/);
+    expect(await stock()).toBe(before - 1);
+  });
 });

@@ -9,6 +9,7 @@ export const PAYMENT_METHOD_LABEL: Record<string, string> = { ...PAYMENT_METHODS
 
 /** Commercial status of a sale: what happened to the operation. */
 export const SALE_STATUS: Record<string, { label: string; tone: Tone }> = {
+  draft: { label: "Borrador", tone: "neutral" },
   completed: { label: "Registrada", tone: "success" },
   partially_returned: { label: "Devolución parcial", tone: "warning" },
   returned: { label: "Devuelta", tone: "danger" },

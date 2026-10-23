@@ -46,7 +46,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
 const matches = (pathname: string, href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
-/** The deepest leaf matching the path wins, so /ventas/pos highlights "Punto de venta" and not "Ventas". */
+/** The deepest leaf matching the path wins, so /ventas/nueva highlights "Nueva venta" and not "Ventas". */
 function activeLeaf(pathname: string, leaves: NavLeaf[]) {
   return leaves.filter((l) => matches(pathname, l.href)).sort((a, b) => b.href.length - a.href.length)[0]?.href;
 }

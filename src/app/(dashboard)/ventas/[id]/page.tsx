@@ -1,10 +1,11 @@
-import { FlaskConical, Receipt } from "lucide-react";
+import { CheckCircle2, FlaskConical, Plus, Receipt } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { Panel } from "@/components/shared/panel";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { buttonVariants } from "@/components/ui/button";
 import { formatDate, formatMoney, formatTime } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 import { can } from "@/modules/authz/permissions";
@@ -23,7 +24,9 @@ export default async function SalePage(props: PageProps<"/ventas/[id]">) {
   const ctx = await requirePermission("sales.read");
   const data = await getSale(await createClient(), ctx.tenant.id, id);
   if (!data) notFound();
+  if (data.sale.status === "draft") redirect(`/ventas/nueva?borrador=${id}`);
   const { sale, items, payments, orders, invoices } = data;
+  const justRegistered = (await props.searchParams).registrada === "1";
   const st = SALE_STATUS[sale.status] ?? SALE_STATUS.completed!;
   const pay = PAYMENT_STATUS[sale.payment_status] ?? PAYMENT_STATUS.pending!;
   const tz = ctx.timezone;
@@ -32,6 +35,17 @@ export default async function SalePage(props: PageProps<"/ventas/[id]">) {
 
   return (
     <>
+      {justRegistered && (
+        <div role="status" className="mb-4 flex flex-col gap-3 rounded-2xl border border-success/30 bg-success/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="flex items-start gap-2 text-sm">
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
+            <span><b>Venta {sale.number} registrada.</b>{" "}
+              {Number(sale.balance) > 0 ? `Queda un saldo de ${formatMoney(sale.balance)}${sale.due_date ? ` con fecha límite ${formatDate(`${sale.due_date}T12:00:00`, tz, { day: "numeric", month: "long" })}` : ""}.` : "Quedó pagada."}
+              {hasLens && !orders.length && " Lleva lentes: crea la orden óptica para enviarlos al laboratorio."}</span>
+          </p>
+          <Link href="/ventas/nueva" className={buttonVariants({ variant: "outline", size: "sm" })}><Plus /> Otra venta</Link>
+        </div>
+      )}
       <PageHeader eyebrow={<Link href="/ventas" className="hover:text-foreground">Ventas</Link>}
         title={<span className="flex items-center gap-3"><span className="font-mono">{sale.number}</span><StatusBadge tone={st.tone}>{st.label}</StatusBadge><StatusBadge tone={pay.tone}>{pay.label}</StatusBadge></span>}
         description={`${formatDate(sale.created_at, tz, { dateStyle: "long" })} · ${formatTime(sale.created_at, tz)} · ${sale.branch?.name} · ${sale.seller?.full_name}`}

@@ -104,3 +104,39 @@ export async function listSellers(db: ServerSupabase, tenantId: string) {
   return (data ?? []).map((m) => ({ id: m.user_id, name: m.profile?.full_name || m.profile?.email || "Sin nombre" }))
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
 }
+
+/** A draft sale with each line as the sale form needs it: current catalog data and the variant's units in the draft's branch. */
+export async function getSaleDraft(db: ServerSupabase, tenantId: string, id: string) {
+  const { data: sale } = await db.from("sales")
+    .select("id, number, status, branch_id, seller_id, notes, patient:patients(id, full_name, document_type, document_number, phone, email)")
+    .eq("tenant_id", tenantId).eq("id", id).maybeSingle();
+  if (!sale || sale.status !== "draft") return null;
+  const { data: items } = await db.from("sale_items")
+    .select("quantity, discount, variant:product_variants(id, sku, barcode, color_name, color_hex, attributes, image_url, price, product:products(id, name, model, unit, tax_rate, is_stocked, brand:brands(name), category:product_categories(name, kind)))")
+    .eq("sale_id", id).order("sort_order");
+  const variantIds = (items ?? []).flatMap((i) => (i.variant ? [i.variant.id] : []));
+  const { data: levels } = variantIds.length
+    ? await db.from("inventory_levels").select("variant_id, quantity").eq("branch_id", sale.branch_id).in("variant_id", variantIds)
+    : { data: [] };
+  const stock = new Map((levels ?? []).map((l) => [l.variant_id, Number(l.quantity)]));
+  const lines = (items ?? []).flatMap((i) => {
+    const v = i.variant;
+    if (!v?.product) return [];
+    const attrs = (v.attributes ?? {}) as Record<string, string>;
+    return [{
+      quantity: Number(i.quantity), discount: Number(i.discount),
+      product: {
+        variantId: v.id, productId: v.product.id, name: v.product.name, detail: [v.color_name, ...Object.values(attrs)].filter(Boolean).join(" · "),
+        brand: v.product.brand?.name ?? null, model: v.product.model, sku: v.sku, barcode: v.barcode, image: v.image_url, colorHex: v.color_hex,
+        kind: v.product.category?.kind ?? "supply", category: v.product.category?.name ?? "", price: Number(v.price), taxRate: Number(v.product.tax_rate),
+        stocked: v.product.is_stocked, available: v.product.is_stocked ? stock.get(v.id) ?? 0 : null, unit: v.product.unit,
+      },
+    }];
+  });
+  return {
+    id: sale.id, number: sale.number, branchId: sale.branch_id, sellerId: sale.seller_id, notes: sale.notes ?? "",
+    customer: sale.patient ? { id: sale.patient.id, full_name: sale.patient.full_name, document_type: sale.patient.document_type,
+      document_number: sale.patient.document_number, phone: sale.patient.phone, email: sale.patient.email } : null,
+    lines,
+  };
+}

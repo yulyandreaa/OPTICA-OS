@@ -287,11 +287,11 @@ export async function seedModules(db: Db, tenantId: string, users: Record<string
       for (const x of stockedExtras) if ((await stockOf(b.id, x.id)) >= 2) candidates.push(x);
       if (!candidates.length) continue;
       const item = pick(candidates);
+      // Walk-in (no customer) sales are paid in full: a balance needs a customer to owe it.
+      const quantity = 1 + Math.floor(rand() * 2);
       const saleId = await as(users.sales!, async () => (await q1<{ id: string }>(`select public.create_sale($1) as id`, [JSON.stringify({
-        tenant_id: tenantId, branch_id: b.id, items: [{ variant_id: item.id, quantity: 1 + Math.floor(rand() * 2) }],
-        payments: [], idempotency_key: `seed-walkin-${i}` })])).id);
-      const total = Number((await q1<{ total: string }>(`select total from public.sales where id = $1`, [saleId])).total);
-      await as(users.sales!, () => db.query(`select public.add_sale_payment($1, $2)`, [saleId, JSON.stringify([{ method: pick(["cash", "nequi", "card"]), amount: total }])]));
+        tenant_id: tenantId, branch_id: b.id, items: [{ variant_id: item.id, quantity }],
+        payments: [{ method: pick(["cash", "nequi", "card"]), amount: item.price * quantity }], idempotency_key: `seed-walkin-${i}` })])).id);
       await db.query(`update public.sales set created_at = now() - make_interval(days => $2) where id = $1`, [saleId, daysAgo]);
     }
     void consultVariant;

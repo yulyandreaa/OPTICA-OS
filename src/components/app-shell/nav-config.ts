@@ -47,7 +47,7 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/ventas", label: "Ventas y cotizaciones", icon: ShoppingCart, permission: "sales.read",
         children: [
           { href: "/ventas", label: "Ventas", permission: "sales.read" },
-          { href: "/ventas/pos", label: "Punto de venta", permission: "pos.use" },
+          { href: "/ventas/nueva", label: "Nueva venta", permission: "sales.create" },
           { href: "/cotizaciones", label: "Cotizaciones", permission: "quotes.read" },
           { href: "/facturacion", label: "Facturación", permission: "billing.read" },
         ],
