@@ -218,15 +218,6 @@ export function ProductForm({ productId, defaults, originalCosts = {}, categorie
             ))}
           </div>
         )}
-        <FormField id="v0-image" label="Enlace de la foto" optional error={err("variants.0.image_url")} hint="Pega el enlace de una imagen publicada (tu web, Instagram, el proveedor)">
-          <div className="flex gap-3">
-            <Input id="v0-image" type="url" placeholder="https://…" {...register("variants.0.image_url")} aria-invalid={!!err("variants.0.image_url")} />
-            {/^https?:\/\/\S+$/.test(main?.image_url ?? "") && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={main!.image_url} alt="" className="size-9 shrink-0 rounded-lg border object-cover" />
-            )}
-          </div>
-        </FormField>
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField id="v0-price" label="Precio de venta (IVA incluido)" error={err("variants.0.price")}>
             <MoneyInput id="v0-price" control={control} name="variants.0.price" invalid={!!err("variants.0.price")} />
@@ -244,21 +235,12 @@ export function ProductForm({ productId, defaults, originalCosts = {}, categorie
           )}
         </div>
         <PriceSummary price={money(main?.price ?? "")} cost={canCosts ? money(main?.cost ?? "") : undefined} taxRate={Number(taxRate)} />
+        {(err("variants") || err("variants.0.sku") || err("variants.0.barcode")) && (
+          <p role="alert" className="text-xs text-destructive">{err("variants") ?? err("variants.0.sku") ?? err("variants.0.barcode")}</p>
+        )}
         <FormField id="description" label="Descripción" optional>
           <Textarea id="description" rows={3} {...register("description")} />
         </FormField>
-      </FormSection>
-
-      <FormSection title="Códigos" description="Para encontrarlo rápido y escanearlo en caja.">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField id="v0-sku" label="SKU o referencia interna" error={err("variants.0.sku")} hint={!main?.id ? "Si lo dejas vacío, lo creamos automáticamente" : undefined}>
-            <Input id="v0-sku" placeholder="Automático" className="font-mono uppercase" {...register("variants.0.sku")} aria-invalid={!!err("variants.0.sku")} />
-          </FormField>
-          <FormField id="v0-barcode" label="Código de barras" optional error={err("variants.0.barcode")}>
-            <Input id="v0-barcode" inputMode="numeric" className="font-mono" {...register("variants.0.barcode")} aria-invalid={!!err("variants.0.barcode")} />
-          </FormField>
-        </div>
-        {err("variants") && <p role="alert" className="text-xs text-destructive">{err("variants")}</p>}
       </FormSection>
 
       <FormSection title="Configuración de inventario" description="Cómo se controlan las existencias de este producto en cada sede.">
