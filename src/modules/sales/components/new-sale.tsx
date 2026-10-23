@@ -16,15 +16,21 @@ import { CustomerPicker } from "./customer-picker";
 import { PaymentDialog, type PaymentPlan } from "./payment-dialog";
 import { ProductPicker } from "./product-picker";
 
-/** A discount is typed as a percentage or a peso amount; the server always receives the peso amount per line. */
-type DiscountMode = "percent" | "amount";
+/**
+ * A discount is typed as a percentage, a peso amount, or by writing the unit price the customer pays ("price").
+ * The catalog price stays as the list price; the server always receives the peso discount per line.
+ */
+type DiscountMode = "percent" | "amount" | "price";
 export type SaleLine = { product: SaleProduct; quantity: number; discountMode: DiscountMode; discountValue: number };
 export type DraftData = { id: string; number: string; branchId: string; customer: CustomerHit | null; sellerId: string; notes: string;
   lines: { product: SaleProduct; quantity: number; discount: number }[] };
 
 const digits = (s: string) => Number(s.replace(/[^\d]/g, "")) || 0;
 const gross = (l: SaleLine) => l.quantity * l.product.price;
-const discountOf = (l: SaleLine) => Math.min(gross(l), l.discountMode === "percent" ? Math.round((gross(l) * l.discountValue) / 100) : l.discountValue);
+const discountOf = (l: SaleLine) => Math.max(0, Math.min(gross(l),
+  l.discountMode === "percent" ? Math.round((gross(l) * l.discountValue) / 100)
+  : l.discountMode === "price" ? (l.product.price - l.discountValue) * l.quantity
+  : l.discountValue));
 
 /**
  * "Nueva venta": who and where on top, then the products with their discounts; a summary that stays in view on the right.
@@ -198,10 +204,15 @@ export function NewSale({ branches, initialBranchId, sellers, me, discountBranch
                             onClick={() => update(i, { quantity: l.quantity + 1 })}><Plus /></Button>
                         </div>
                       </Labeled>
-                      <Labeled label="Precio unit."><span className="flex h-8 items-center text-sm tabular">{formatMoney(l.product.price)}</span></Labeled>
+                      <Labeled label="Precio c/u">
+                        {canDiscount ? (
+                          <UnitPriceInput list={l.product.price} unit={l.product.price - d / l.quantity} label={l.product.name}
+                            onChange={(price) => update(i, price === null ? { discountMode: "percent", discountValue: 0 } : { discountMode: "price", discountValue: price })} />
+                        ) : <span className="flex h-8 items-center text-sm tabular">{formatMoney(l.product.price)}</span>}
+                      </Labeled>
                       <Labeled label="Descuento">
                         {canDiscount ? (
-                          <DiscountInput mode={l.discountMode} value={l.discountValue} amount={d} label={l.product.name}
+                          <DiscountInput mode={l.discountMode} value={l.discountValue} amount={d} gross={gross(l)} label={l.product.name}
                             onChange={(mode, value) => update(i, { discountMode: mode, discountValue: value })} />
                         ) : <span className="flex h-8 items-center text-xs text-muted-foreground">Sin permiso para descuentos</span>}
                       </Labeled>
@@ -301,21 +312,63 @@ function Labeled({ label, children }: { label: string; children: React.ReactNode
   return <div className="grid gap-1"><span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{label}</span>{children}</div>;
 }
 
-/** Discount per line in % or $; shows what it is worth in pesos. */
-function DiscountInput({ mode, value, amount, label, onChange }: { mode: DiscountMode; value: number; amount: number; label: string; onChange: (m: DiscountMode, v: number) => void }) {
+/**
+ * Unit price the customer pays. Starts at the list (catalog) price; writing a lower one turns the difference into the
+ * line's discount. It can't go above the list price (that would be a surcharge, which sales don't support).
+ */
+function UnitPriceInput({ list, unit, label, onChange }: { list: number; unit: number; label: string; onChange: (price: number | null) => void }) {
+  const [text, setText] = useState<string | null>(null); // what's being typed; null = show the computed price
+  const typed = text === null ? null : digits(text);
+  const tooHigh = typed !== null && typed > list;
+  const shown = text ?? Math.round(unit).toLocaleString("es-CO");
+  return (
+    <div className="relative w-36">
+      <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+      <Input aria-label={`Precio por unidad de ${label}`} inputMode="numeric" className={cn("h-8 pl-6 text-right text-sm tabular", tooHigh && "border-destructive")}
+        value={shown}
+        onChange={(e) => {
+          const v = e.target.value;
+          setText(v);
+          const n = digits(v);
+          if (v.trim() === "") onChange(null);
+          else if (n <= list) onChange(n);
+        }}
+        onBlur={() => setText(null)} />
+      <p className={cn("absolute top-full right-0 mt-0.5 text-[11px] whitespace-nowrap tabular", tooHigh ? "text-destructive" : "text-muted-foreground")}>
+        {tooHigh ? `Máximo ${formatMoney(list)}` : Math.round(unit) < list ? <>Lista <span className="line-through">{formatMoney(list)}</span></> : "Precio de lista"}
+      </p>
+    </div>
+  );
+}
+
+/** Discount per line in % or $ (a price typed in "Precio c/u" shows here as its $ equivalent). */
+function DiscountInput({ mode, value, amount, gross: lineGross, label, onChange }: {
+  mode: DiscountMode; value: number; amount: number; gross: number; label: string; onChange: (m: DiscountMode, v: number) => void;
+}) {
+  const shownMode = mode === "price" ? "amount" : mode;
+  const shownValue = mode === "price" ? amount : value;
+  // Switching % ⇄ $ keeps the same discount instead of wiping it.
+  const switchTo = (m: "percent" | "amount") => {
+    if (m === shownMode) return;
+    onChange(m, m === "amount" ? amount : lineGross ? (amount / lineGross) * 100 : 0); // exact %, shown rounded
+  };
   return (
     <div className="flex items-center gap-1.5">
       <div className="flex shrink-0 rounded-lg border p-0.5" role="group" aria-label={`Tipo de descuento de ${label}`}>
         {(["percent", "amount"] as const).map((m) => (
-          <button key={m} type="button" aria-pressed={mode === m} onClick={() => onChange(m, 0)}
-            className={cn("h-6 w-6 rounded-md text-xs font-medium", mode === m ? "bg-brand text-white" : "text-muted-foreground hover:bg-muted")}>{m === "percent" ? "%" : "$"}</button>
+          <button key={m} type="button" aria-pressed={shownMode === m} onClick={() => switchTo(m)}
+            className={cn("h-6 w-6 rounded-md text-xs font-medium", shownMode === m ? "bg-brand text-white" : "text-muted-foreground hover:bg-muted")}>{m === "percent" ? "%" : "$"}</button>
         ))}
       </div>
-      <div className="relative w-32">
+      <div className="relative w-28">
         <Input aria-label={`Descuento de ${label}`} inputMode="numeric" className="h-8 text-right text-sm tabular" placeholder="0"
-          value={value ? (mode === "amount" ? value.toLocaleString("es-CO") : String(value)) : ""}
-          onChange={(e) => onChange(mode, mode === "percent" ? Math.min(100, digits(e.target.value)) : digits(e.target.value))} />
-        {mode === "percent" && amount > 0 && <p className="absolute top-full right-0 mt-0.5 text-[11px] whitespace-nowrap text-success tabular">− {formatMoney(amount)}</p>}
+          value={shownValue ? (shownMode === "amount" ? shownValue.toLocaleString("es-CO") : shownValue.toLocaleString("es-CO", { maximumFractionDigits: 1 })) : ""}
+          onChange={(e) => onChange(shownMode, shownMode === "percent" ? Math.min(100, digits(e.target.value)) : digits(e.target.value))} />
+        {amount > 0 && (
+          <p className="absolute top-full right-0 mt-0.5 text-[11px] whitespace-nowrap text-success tabular">
+            {shownMode === "percent" ? `− ${formatMoney(amount)}` : `${((amount / lineGross) * 100).toLocaleString("es-CO", { maximumFractionDigits: 1 })} %`}
+          </p>
+        )}
       </div>
     </div>
   );
