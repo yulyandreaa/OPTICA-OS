@@ -17,7 +17,7 @@ const payment = z.object({
 const saleSchema = z.object({
   branchId: z.uuid().optional(), patientId: z.uuid().nullable(), prescriptionId: z.uuid().nullable().optional(), sellerId: z.uuid().optional(),
   notes: z.string().max(500).optional(), paymentTerms: z.string().max(200).optional(),
-  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), draftId: z.uuid().optional(),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), draftId: z.uuid().optional(), labOrderId: z.uuid().optional(),
   items: z.array(item).min(1, "Agrega al menos un producto"), payments: z.array(payment), idempotencyKey: z.string().min(8).max(80),
 });
 const draftSchema = saleSchema.pick({ branchId: true, patientId: true, sellerId: true, notes: true, paymentTerms: true, draftId: true })
@@ -44,6 +44,7 @@ export async function createSaleAction(input: z.input<typeof saleSchema>): Promi
   const { data, error } = await db.rpc("create_sale", { p: {
     tenant_id: ctx.tenant.id, branch_id: branchId, patient_id: v.patientId, prescription_id: v.prescriptionId ?? null, notes: v.notes ?? null,
     seller_id: v.sellerId ?? null, payment_terms: v.paymentTerms ?? null, due_date: v.dueDate ?? null, draft_id: v.draftId ?? null,
+    lab_order_id: v.labOrderId ?? null,
     idempotency_key: v.idempotencyKey,
     items: v.items.map((i) => ({ variant_id: i.variantId, quantity: i.quantity, discount: i.discount })),
     payments: v.payments.map((p) => ({ method: p.method, amount: p.amount, reference: p.reference ?? null })),
@@ -106,6 +107,19 @@ export async function searchSaleProductsAction(query: string, branchId: string, 
     sku: r.sku, barcode: r.barcode, image: r.image_url, colorHex: r.color_hex, kind: r.category_kind, category: r.category,
     price: Number(r.price), taxRate: tax.get(r.product_id) ?? 19, stocked: r.is_stocked, available: r.is_stocked ? Number(r.quantity ?? 0) : null, unit: r.unit,
   }));
+}
+
+export type OpenLabOrder = { id: string; number: string; status: string; created_at: string; frame_description: string | null; lens_description: string | null };
+
+/** Optical orders of a customer that are still open and have no sale yet (they can be linked when confirming). */
+export async function openLabOrdersAction(patientId: string): Promise<OpenLabOrder[]> {
+  const ctx = await getAppContext();
+  if (!ctx || !can(ctx.grants, "lab_orders.read") || !z.uuid().safeParse(patientId).success) return [];
+  const db = await createClient();
+  const { data } = await db.from("lab_orders").select("id, number, status, created_at, frame_description, lens_description")
+    .eq("tenant_id", ctx.tenant.id).eq("patient_id", patientId).is("sale_id", null).not("status", "in", "(cancelled,delivered)")
+    .order("created_at", { ascending: false }).limit(10);
+  return data ?? [];
 }
 
 export type CustomerHit = { id: string; full_name: string; document_type: string; document_number: string; phone: string | null; email: string | null };

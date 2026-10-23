@@ -35,6 +35,8 @@ const BY_MESSAGE: Record<string, string> = {
   INVALID_DISCOUNT: "El descuento no es válido.",
   INVALID_DUE_DATE: "La fecha límite de pago no puede ser anterior a hoy.",
   INVALID_VALID_UNTIL: "La fecha de vencimiento no puede ser anterior a hoy.",
+  LAB_ORDER_NOT_FOUND: "La orden óptica ya no existe.",
+  LAB_ORDER_NOT_LINKABLE: "Esa orden óptica ya tiene una venta, está cerrada o es de otro cliente.",
   QUOTE_LOCKED: "Esta cotización ya no se puede editar.",
   QUOTE_NOT_SENT: "La cotización está en borrador: emítela antes de convertirla en venta.",
   QUOTE_NOT_CONVERTIBLE: "Esta cotización ya no se puede convertir en venta.",

@@ -54,23 +54,23 @@ export function ProductPicker({ branchId, inCart, onAdd }: { branchId: string; i
       <div className="relative">
         {loading ? <Loader2 className="absolute top-1/2 left-3 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
           : <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />}
-        <input ref={inputRef} value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={onKey}
+        <input id="sale-product-search" ref={inputRef} value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={onKey}
           aria-label="Buscar productos y servicios" aria-expanded={open} aria-controls="product-results" role="combobox" autoComplete="off"
           placeholder="Buscar producto por nombre, SKU, marca, modelo o código de barras"
           className="h-11 w-full rounded-xl border border-input bg-surface pr-10 pl-9 text-sm shadow-soft outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40" />
         <ScanBarcode className="absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
       </div>
+      <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Categoría">
+        {KIND_FILTERS.map((k) => (
+          <button key={k ?? "all"} type="button" onClick={() => { setKind(k); setOpen(true); inputRef.current?.focus(); }} aria-pressed={kind === k}
+            className={cn("rounded-full border px-3.5 py-1 text-xs transition-colors", kind === k ? "border-brand bg-brand font-medium text-white" : "bg-surface text-foreground/80 hover:bg-muted")}>
+            {k ? KIND_LABEL[k] : "Todos"}
+          </button>
+        ))}
+      </div>
 
       {open && (
-        <div id="product-results" className="absolute inset-x-0 top-full z-30 mt-2 overflow-hidden rounded-xl border bg-surface shadow-lg">
-          <div className="flex flex-wrap gap-1.5 border-b p-2" role="group" aria-label="Categoría">
-            {KIND_FILTERS.map((k) => (
-              <button key={k ?? "all"} type="button" onClick={() => setKind(k)} aria-pressed={kind === k}
-                className={cn("rounded-full border px-2.5 py-0.5 text-xs transition-colors", kind === k ? "border-brand bg-brand-soft font-medium text-brand" : "text-muted-foreground hover:bg-muted")}>
-                {k ? KIND_LABEL[k] : "Todo"}
-              </button>
-            ))}
-          </div>
+        <div id="product-results" className="absolute inset-x-0 top-12 z-30 overflow-hidden rounded-xl border bg-surface shadow-lg">
           <ul className="max-h-80 divide-y overflow-y-auto" aria-label="Resultados" aria-busy={loading}>
             {results.map((p) => {
               const left = p.available === null ? null : p.available - inCart(p.variantId);

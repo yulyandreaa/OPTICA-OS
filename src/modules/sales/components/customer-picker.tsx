@@ -1,5 +1,5 @@
 "use client";
-import { Loader2, Mail, Phone, Search, UserPlus, UserRound, X } from "lucide-react";
+import { ArrowLeftRight, Loader2, Mail, Phone, Search } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { FormField } from "@/components/shared/form-field";
@@ -12,12 +12,13 @@ import { createPatientAction } from "@/modules/patients/actions";
 import { DOCUMENT_TYPES } from "@/modules/patients/schemas";
 import { searchCustomersAction, type CustomerHit } from "../actions";
 
-/** Picks a person from the Clientes y pacientes directory (or registers a new customer there). Contact data only. */
-export function CustomerPicker({ value, onChange, canCreate }: { value: CustomerHit | null; onChange: (c: CustomerHit | null) => void; canCreate: boolean }) {
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
+
+/** Picks a person from the Clientes y pacientes directory. Contact data only, nothing clinical. */
+export function CustomerPicker({ value, onChange }: { value: CustomerHit | null; onChange: (c: CustomerHit | null) => void }) {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<CustomerHit[] | null>(null);
   const [loading, setLoading] = useState(false);
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     if (q.trim().length < 2) return;
@@ -31,18 +32,18 @@ export function CustomerPicker({ value, onChange, canCreate }: { value: Customer
 
   if (value) {
     return (
-      <div className="flex items-start gap-3 rounded-xl border bg-muted/30 p-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-soft text-brand"><UserRound className="size-5" /></span>
-        <div className="min-w-0 flex-1 text-sm">
-          <p className="truncate font-medium">{value.full_name}</p>
-          <p className="text-muted-foreground">{value.document_type} {value.document_number}</p>
-          <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            {value.phone && <span className="inline-flex items-center gap-1"><Phone className="size-3.5" />{value.phone}</span>}
-            {value.email && <span className="inline-flex items-center gap-1"><Mail className="size-3.5" />{value.email}</span>}
-            {!value.phone && !value.email && <span>Sin datos de contacto</span>}
+      <div className="flex flex-wrap items-center gap-4 rounded-xl border p-4">
+        <span className="grid size-11 shrink-0 place-items-center rounded-full bg-brand-soft text-sm font-semibold text-brand">{initials(value.full_name)}</span>
+        <div className="min-w-0 flex-1 basis-56">
+          <p className="flex flex-wrap items-center gap-2 font-medium">{value.full_name}
+            <span className="rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">Cliente activo</span></p>
+          <p className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+            <span>{value.document_type} {value.document_number}</span>
+            {value.phone && <span className="inline-flex items-center gap-1.5"><Phone className="size-3.5" />{value.phone}</span>}
+            {value.email && <span className="inline-flex min-w-0 items-center gap-1.5"><Mail className="size-3.5 shrink-0" /><span className="truncate">{value.email}</span></span>}
           </p>
         </div>
-        <Button type="button" variant="ghost" size="sm" onClick={() => { onChange(null); setQ(""); setHits(null); }}><X /> Cambiar</Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => { onChange(null); setQ(""); setHits(null); }}><ArrowLeftRight /> Cambiar</Button>
       </div>
     );
   }
@@ -53,7 +54,7 @@ export function CustomerPicker({ value, onChange, canCreate }: { value: Customer
       <div className="relative">
         {loading ? <Loader2 className="absolute top-1/2 left-3 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
           : <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />}
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre, documento, celular o correo" aria-label="Buscar cliente" className="h-10 pl-9" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre, documento, teléfono o correo…" aria-label="Buscar cliente" className="h-10 pl-9" />
       </div>
       {typed && hits && (
         <ul className="divide-y overflow-hidden rounded-xl border" role="listbox" aria-label="Clientes encontrados">
@@ -61,7 +62,7 @@ export function CustomerPicker({ value, onChange, canCreate }: { value: Customer
             <li key={h.id}>
               <button type="button" role="option" aria-selected={false} onClick={() => onChange(h)}
                 className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none">
-                <UserRound className="size-4 shrink-0 text-muted-foreground" />
+                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-xs font-medium">{initials(h.full_name)}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{h.full_name}</span>
                   <span className="block truncate text-xs text-muted-foreground">{h.document_type} {h.document_number}{h.phone ? ` · ${h.phone}` : ""}</span>
@@ -69,20 +70,16 @@ export function CustomerPicker({ value, onChange, canCreate }: { value: Customer
               </button>
             </li>
           ))}
-          {hits.length === 0 && <li className="px-3 py-3 text-sm text-muted-foreground">No encontramos a nadie con “{q.trim()}”.</li>}
+          {hits.length === 0 && <li className="px-3 py-3 text-sm text-muted-foreground">No encontramos a nadie con “{q.trim()}”. Puedes registrarlo con “Nuevo cliente”.</li>}
         </ul>
       )}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <span>Si no eliges cliente, la venta queda como venta de mostrador y debe pagarse completa.</span>
-        {canCreate && <button type="button" onClick={() => setCreating(true)} className="inline-flex items-center gap-1 font-medium text-brand hover:underline"><UserPlus className="size-3.5" /> Registrar cliente nuevo</button>}
-      </div>
-      {canCreate && <NewCustomerDialog open={creating} onOpenChange={setCreating} initial={q} onCreated={(c) => { onChange(c); setCreating(false); }} />}
+      <p className="text-xs text-muted-foreground">Sin cliente, la venta queda como venta de mostrador y debe pagarse completa.</p>
     </div>
   );
 }
 
 /** Minimal customer registration in the shared directory (duplicate documents are refused by the directory itself). */
-function NewCustomerDialog({ open, onOpenChange, initial, onCreated }: { open: boolean; onOpenChange: (o: boolean) => void; initial: string; onCreated: (c: CustomerHit) => void }) {
+export function NewCustomerDialog({ open, onOpenChange, initial, onCreated }: { open: boolean; onOpenChange: (o: boolean) => void; initial: string; onCreated: (c: CustomerHit) => void }) {
   const [pending, startTransition] = useTransition();
   const [errors, setErrors] = useState<Record<string, string[] | undefined>>({});
   const [consent, setConsent] = useState(false);

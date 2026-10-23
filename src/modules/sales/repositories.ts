@@ -98,10 +98,14 @@ export async function listOperations(db: ServerSupabase, tenantId: string, f: {
   return { rows: rows as OperationRow[], total: Number(rows[0]?.total_count ?? 0) };
 }
 
-/** People who can appear as the seller of an operation: active members with permission to sell. */
+/** Active members of the company, with their (first) role name: who can appear as the seller of an operation. */
 export async function listSellers(db: ServerSupabase, tenantId: string) {
-  const { data } = await db.from("tenant_members").select("user_id, profile:profiles!tenant_members_user_id_fkey(full_name, email)").eq("tenant_id", tenantId).eq("status", "active");
-  return (data ?? []).map((m) => ({ id: m.user_id, name: m.profile?.full_name || m.profile?.email || "Sin nombre" }))
+  const [{ data }, { data: roles }] = await Promise.all([
+    db.from("tenant_members").select("user_id, profile:profiles!tenant_members_user_id_fkey(full_name, email)").eq("tenant_id", tenantId).eq("status", "active"),
+    db.from("user_roles").select("user_id, role:roles(name)").eq("tenant_id", tenantId),
+  ]);
+  const roleOf = new Map((roles ?? []).map((r) => [r.user_id, r.role?.name ?? null]));
+  return (data ?? []).map((m) => ({ id: m.user_id, name: m.profile?.full_name || m.profile?.email || "Sin nombre", role: roleOf.get(m.user_id) ?? null }))
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
 }
 

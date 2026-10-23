@@ -165,4 +165,15 @@ describe("ventas y cotizaciones", () => {
     expect(s.number).toMatch(/^V-/);
     expect(await stock()).toBe(before - 1);
   });
+
+  it("vincula una orden óptica abierta del mismo cliente al confirmar, y rechaza la de otro cliente", async () => {
+    const other = (await one<{ id: string }>(owner, `insert into public.patients (tenant_id, document_type, document_number, first_name, last_name) values ($1, 'CC', '888', 'Otro', 'Cliente') returning id`, [tenant])).id;
+    const order = (await one<{ id: string }>(owner, `insert into public.lab_orders (tenant_id, branch_id, patient_id, number) values ($1, $2, $3, '') returning id`, [tenant, branch, patient])).id;
+    const foreign = (await one<{ id: string }>(owner, `insert into public.lab_orders (tenant_id, branch_id, patient_id, number) values ($1, $2, $3, '') returning id`, [tenant, branch, other])).id;
+    expect(await expectDenied(db, seller, `select public.create_sale($1)`, [{ tenant_id: tenant, branch_id: branch, patient_id: patient, lab_order_id: foreign,
+      items: [{ variant_id: service, quantity: 1 }], payments: [{ method: "cash", amount: 50000 }] }])).toMatch(/LAB_ORDER_NOT_LINKABLE/);
+    const saleId = (await one<{ id: string }>(seller, `select public.create_sale($1) as id`, [{ tenant_id: tenant, branch_id: branch, patient_id: patient, lab_order_id: order,
+      items: [{ variant_id: service, quantity: 1 }], payments: [{ method: "cash", amount: 50000 }] }])).id;
+    expect((await row<{ sale_id: string }>("lab_orders", order, "sale_id")).sale_id).toBe(saleId);
+  });
 });
