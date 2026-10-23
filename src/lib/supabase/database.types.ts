@@ -2798,6 +2798,7 @@ export type Database = {
       booking_catalog: { Args: { p_slug: string }; Returns: Json }
       booking_create: { Args: { p_slug: string; p_branch: string; p_type: string; p_specialist: string; p_starts_at: string; p_document_type: string; p_document_number: string; p_first_name: string; p_last_name: string; p_phone: string; p_email: string; p_accept_data_policy: boolean; p_policy_version: string }; Returns: Json }
       booking_slots: { Args: { p_slug: string; p_branch: string; p_type: string; p_date: string; p_specialist?: string }; Returns: { specialist_id: string | null; starts_at: string | null }[] }
+      branch_delete_blocker: { Args: { p_tenant: string; p_branch: string }; Returns: string }
       cancel_transfer: { Args: { p_transfer: string; p_reason?: string }; Returns: string }
       convert_quote: { Args: { p_quote: string; p_payments: Json; p_idempotency_key?: string }; Returns: string }
       create_quote: { Args: { p: Json }; Returns: string }
@@ -2806,6 +2807,7 @@ export type Database = {
       create_transfer: { Args: { p: Json }; Returns: string }
       dashboard_metrics: { Args: { p_tenant: string; p_branch?: string }; Returns: Json }
       dashboard_summary: { Args: { p_tenant: string; p_from: string; p_to: string; p_prev_from: string; p_prev_to: string; p_branch?: string; p_bucket?: string }; Returns: Json }
+      delete_branch: { Args: { p_tenant: string; p_branch: string }; Returns: undefined }
       delete_product: { Args: { p_tenant: string; p_product: string }; Returns: undefined }
       find_person_matches: { Args: { p_tenant: string; p_document_type: string; p_document_number: string; p_first_name: string; p_last_name: string; p_birth_date?: string; p_phone?: string; p_email?: string; p_exclude?: string }; Returns: { id: string | null; full_name: string | null; document_type: string | null; document_number: string | null; phone: string | null; email: string | null; is_active: boolean | null; reasons: string[] | null }[] }
       inventory_list: { Args: { p_tenant: string; p_branch?: string; p_query?: string; p_category?: string; p_brand?: string; p_status?: string; p_availability?: string; p_limit?: number; p_offset?: number }; Returns: { variant_id: string | null; product_id: string | null; product_name: string | null; model: string | null; brand: string | null; category: string | null; category_kind: string | null; sku: string | null; barcode: string | null; color_name: string | null; color_hex: string | null; attributes: Json | null; image_url: string | null; unit: string | null; is_stocked: boolean | null; track_lots: boolean | null; price: number | null; cost: number | null; quantity: number | null; min_quantity: number | null; in_transit: number | null; branches: Json | null; stock_status: string | null; is_active: boolean | null; next_expiry: string | null; total_count: number | null }[] }
@@ -2825,6 +2827,7 @@ export type Database = {
       record_movement: { Args: { p: Json }; Returns: string }
       report_sales: { Args: { p_tenant: string; p_from: string; p_to: string; p_branch?: string }; Returns: Json }
       save_product: { Args: { p: Json }; Returns: string }
+      set_main_branch: { Args: { p_tenant: string; p_branch: string }; Returns: undefined }
       set_min_stock: { Args: { p_tenant: string; p_branch: string; p_variant: string; p_min: number }; Returns: undefined }
       sign_medical_record: { Args: { p_record: string }; Returns: Json }
       slug_available: { Args: { p_slug: string }; Returns: boolean }

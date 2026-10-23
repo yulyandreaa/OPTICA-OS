@@ -53,6 +53,29 @@ export async function createBranchAction(input: z.input<typeof branchSchema>): P
   return ok(undefined, "Sede creada");
 }
 
+export async function setMainBranchAction(branchId: string): Promise<ActionResult> {
+  if (!z.uuid().safeParse(branchId).success) return fail("Sede no válida.");
+  const ctx = await getAppContext();
+  if (!ctx || !can(ctx.grants, "branches.manage")) return fail("No tienes permiso para gestionar sedes.");
+  const db = await createClient();
+  const { error } = await db.rpc("set_main_branch", { p_tenant: ctx.tenant.id, p_branch: branchId });
+  if (error) return fromError("settings.main_branch", error);
+  revalidatePath("/", "layout");
+  return ok(undefined, "Sede principal actualizada");
+}
+
+/** Soft delete: past sales, movements and appointments keep their branch. The database explains any blocker. */
+export async function deleteBranchAction(branchId: string): Promise<ActionResult> {
+  if (!z.uuid().safeParse(branchId).success) return fail("Sede no válida.");
+  const ctx = await getAppContext();
+  if (!ctx || !can(ctx.grants, "branches.manage")) return fail("No tienes permiso para eliminar sedes.");
+  const db = await createClient();
+  const { error } = await db.rpc("delete_branch", { p_tenant: ctx.tenant.id, p_branch: branchId });
+  if (error) return fromError("settings.delete_branch", error);
+  revalidatePath("/", "layout");
+  return ok(undefined, "Sede eliminada");
+}
+
 const scheduleSchema = z.object({
   userId: z.uuid(),
   branchId: z.uuid(),
