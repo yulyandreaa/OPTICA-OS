@@ -193,14 +193,6 @@ export function ProductForm({ productId, defaults, originalCosts = {}, categorie
             La graduación de cada paciente no se registra aquí: va en la fórmula y en la orden óptica.
           </p>
         )}
-        <FormField id="description" label="Descripción" optional>
-          <Textarea id="description" rows={3} {...register("description")} />
-        </FormField>
-      </FormSection>
-
-      <FormSection title="Características" description={hasColor || variantFields.length
-        ? "Cómo se ve y qué medidas tiene. Si vendes otro color o calibre, créalo como otro producto."
-        : "La foto con la que se reconoce en el catálogo."}>
         {extraVariants > 0 && (
           <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
             Este producto se creó con {extraVariants + 1} presentaciones. Aquí editas la principal; las otras se conservan sin cambios.
@@ -235,9 +227,6 @@ export function ProductForm({ productId, defaults, originalCosts = {}, categorie
             )}
           </div>
         </FormField>
-      </FormSection>
-
-      <FormSection title="Precio" description="El precio se registra con IVA incluido. Confirma con tu contador la tarifa de cada producto.">
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField id="v0-price" label="Precio de venta (IVA incluido)" error={err("variants.0.price")}>
             <MoneyInput id="v0-price" control={control} name="variants.0.price" invalid={!!err("variants.0.price")} />
@@ -255,6 +244,9 @@ export function ProductForm({ productId, defaults, originalCosts = {}, categorie
           )}
         </div>
         <PriceSummary price={money(main?.price ?? "")} cost={canCosts ? money(main?.cost ?? "") : undefined} taxRate={Number(taxRate)} />
+        <FormField id="description" label="Descripción" optional>
+          <Textarea id="description" rows={3} {...register("description")} />
+        </FormField>
       </FormSection>
 
       <FormSection title="Códigos" description="Para encontrarlo rápido y escanearlo en caja.">
