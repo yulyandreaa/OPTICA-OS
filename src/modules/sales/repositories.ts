@@ -65,3 +65,42 @@ export async function posCatalog(db: ServerSupabase, tenantId: string, branchId:
     image: v.image_url, stocked: v.product.is_stocked, stock: v.product.is_stocked ? stock.get(v.id) ?? 0 : null,
   }] : []).sort((a, b) => order.indexOf(a.categoryCode) - order.indexOf(b.categoryCode) || Number(!a.image) - Number(!b.image) || a.name.localeCompare(b.name, "es"));
 }
+
+export type SalesOverview = {
+  net_sales: number; gross_sales: number; discounts: number; sales_count: number; voided_count: number; balance_due: number;
+  open_quotes: number; open_quotes_total: number; draft_quotes: number; issued_quotes: number; converted_quotes: number;
+};
+
+/** Indicators of "Ventas y cotizaciones" (definitions in docs/sales-metrics.md). */
+export async function salesOverview(db: ServerSupabase, tenantId: string, from: string, to: string, branchId: string | null) {
+  const { data, error } = await db.rpc("sales_overview", { p_tenant: tenantId, p_from: from, p_to: to, p_branch: branchId ?? undefined });
+  if (error) throw error;
+  const o = data as Record<string, number | string>;
+  return Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Number(v)])) as SalesOverview;
+}
+
+export type OperationRow = {
+  kind: "sale" | "quote"; id: string; number: string; created_at: string; customer_id: string | null; customer_name: string | null;
+  customer_document: string | null; branch_name: string | null; seller_name: string | null; total: number; balance: number | null;
+  status: string; payment_status: string | null; valid_until: string | null; items_count: number;
+};
+
+/** Sales and quotes in one list, newest first, with the total count for pagination. */
+export async function listOperations(db: ServerSupabase, tenantId: string, f: {
+  kind: string; from?: string; to?: string; branchId?: string | null; query?: string; status?: string; payment?: string; seller?: string; limit: number; offset: number;
+}) {
+  const { data, error } = await db.rpc("sales_operations", {
+    p_tenant: tenantId, p_kind: f.kind, p_from: f.from, p_to: f.to, p_branch: f.branchId ?? undefined, p_query: f.query,
+    p_status: f.status, p_payment: f.payment, p_seller: f.seller, p_limit: f.limit, p_offset: f.offset,
+  });
+  if (error) throw error;
+  const rows = (data ?? []) as unknown as (OperationRow & { total_count: number })[];
+  return { rows: rows as OperationRow[], total: Number(rows[0]?.total_count ?? 0) };
+}
+
+/** People who can appear as the seller of an operation: active members with permission to sell. */
+export async function listSellers(db: ServerSupabase, tenantId: string) {
+  const { data } = await db.from("tenant_members").select("user_id, profile:profiles!tenant_members_user_id_fkey(full_name, email)").eq("tenant_id", tenantId).eq("status", "active");
+  return (data ?? []).map((m) => ({ id: m.user_id, name: m.profile?.full_name || m.profile?.email || "Sin nombre" }))
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+}

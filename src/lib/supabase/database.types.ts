@@ -2858,6 +2858,8 @@ export type Database = {
       receive_transfer: { Args: { p_transfer: string }; Returns: string }
       record_movement: { Args: { p: Json }; Returns: string }
       report_sales: { Args: { p_tenant: string; p_from: string; p_to: string; p_branch?: string }; Returns: Json }
+      sales_operations: { Args: { p_tenant: string; p_kind?: string; p_from?: string; p_to?: string; p_branch?: string; p_query?: string; p_status?: string; p_payment?: string; p_seller?: string; p_limit?: number; p_offset?: number }; Returns: { kind: string | null; id: string | null; number: string | null; created_at: string | null; customer_id: string | null; customer_name: string | null; customer_document: string | null; branch_name: string | null; seller_name: string | null; total: number | null; balance: number | null; status: string | null; payment_status: string | null; valid_until: string | null; items_count: number | null; total_count: number | null }[] }
+      sales_overview: { Args: { p_tenant: string; p_from: string; p_to: string; p_branch?: string }; Returns: Json }
       save_product: { Args: { p: Json }; Returns: string }
       save_quote: { Args: { p: Json }; Returns: string }
       set_main_branch: { Args: { p_tenant: string; p_branch: string }; Returns: undefined }

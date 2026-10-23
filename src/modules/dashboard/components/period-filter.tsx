@@ -1,23 +1,31 @@
 "use client";
 import { CalendarRange, Loader2 } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { DatePicker } from "@/components/shared/date-picker";
 import { NativeSelect } from "@/components/shared/native-select";
 import { Button } from "@/components/ui/button";
 import { PERIOD_OPTIONS, type PeriodKey } from "../period";
 
-/** Period selector; the choice lives in the URL so every section, reload and shared link agree. */
-export function PeriodFilter({ value, from, to }: { value: PeriodKey; from: string; to: string }) {
+/**
+ * Period selector; the choice lives in the URL so every section, reload and shared link agree.
+ * With `keepParams`, the page's other filters survive a period change (pagination restarts).
+ */
+export function PeriodFilter({ value, from, to, keepParams = false }: { value: PeriodKey; from: string; to: string; keepParams?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
+  const current = useSearchParams();
   const [pending, startTransition] = useTransition();
   const [key, setKey] = useState<PeriodKey>(value);
   const [desde, setDesde] = useState(from);
   const [hasta, setHasta] = useState(to);
 
-  const go = (params: Record<string, string>) =>
-    startTransition(() => router.push(`${pathname}?${new URLSearchParams(params).toString()}`, { scroll: false }));
+  const go = (params: Record<string, string>) => {
+    const next = new URLSearchParams(keepParams ? current : undefined);
+    for (const k of ["periodo", "desde", "hasta", "pagina"]) next.delete(k);
+    for (const [k, v] of Object.entries(params)) next.set(k, v);
+    startTransition(() => router.push(`${pathname}?${next.toString()}`, { scroll: false }));
+  };
 
   const onSelect = (next: PeriodKey) => {
     setKey(next);

@@ -109,4 +109,35 @@ describe("ventas y cotizaciones", () => {
     expect((await one<{ s: string }>(seller, `select public.set_quote_status($1, 'accepted') as s`, [old])).s).toBe("expired");
     expect((await row<{ status: string }>("quotes", old, "status")).status).toBe("expired");
   });
+
+  it("indicadores: ventas netas sin IVA, cotizaciones abiertas y conversión por cohorte", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const o = await one<{ o: Record<string, number> }>(owner, `select public.sales_overview($1, $2, $3) as o`, [tenant, "2020-01-01", "2100-01-01"]);
+    const sums = await db.query<{ net: string; n: string }>(`select sum(total - tax_total) as net, count(*) as n from public.sales where tenant_id = $1 and status in ('completed', 'partially_returned')`, [tenant]);
+    expect(Number(o.o.net_sales)).toBeCloseTo(Number(sums.rows[0]!.net), 2);
+    expect(Number(o.o.sales_count)).toBe(Number(sums.rows[0]!.n));
+    // Quotes created above: one draft converted, one rejected, one expired → 3 issued (no draft left), 1 converted.
+    expect(o.o).toMatchObject({ issued_quotes: 3, converted_quotes: 1, open_quotes: 0 });
+    await quote(seller, { status: "sent", valid_until: today, items: [{ variant_id: service, quantity: 1 }] });
+    const o2 = await one<{ o: Record<string, number> }>(owner, `select public.sales_overview($1, $2, $3) as o`, [tenant, "2020-01-01", "2100-01-01"]);
+    expect(o2.o).toMatchObject({ open_quotes: 1, issued_quotes: 4 });
+  });
+
+  it("lista de operaciones: busca por cliente, producto y número, y filtra por tipo y estado", async () => {
+    type Op = { kind: string; number: string; status: string; total_count: number };
+    const ops = (args: string, params: unknown[] = []) =>
+      asUser(db, owner, async () => (await db.query<Op>(`select * from public.sales_operations($1${args})`, [tenant, ...params])).rows);
+    const all = await ops("");
+    expect(all.length).toBeGreaterThan(0);
+    expect(Number(all[0]!.total_count)).toBe(all.length);
+    expect((await ops(", p_query => $2", ["Eva"])).length).toBe(all.length); // every operation is Eva's
+    expect((await ops(", p_query => $2", ["777"])).length).toBe(all.length); // by document
+    expect((await ops(", p_kind => 'sale', p_query => $2", ["Examen"])).every((r) => r.kind === "sale")).toBe(true);
+    expect((await ops(", p_kind => 'quote', p_status => 'expired'")).map((r) => r.status)).toEqual(["expired"]);
+    const first = all.find((r) => r.kind === "sale")!;
+    expect((await ops(", p_query => $2", [first.number])).map((r) => r.number)).toContain(first.number);
+    expect((await ops(", p_kind => 'sale', p_payment => 'paid'")).length).toBeGreaterThan(0);
+    expect((await ops(", p_kind => 'void'")).length).toBe(0);
+    expect((await ops(", p_query => $2", ["nadie-zzz"])).length).toBe(0);
+  });
 });
