@@ -38,6 +38,9 @@ const LENSES = [
 export async function seedModules(db: Db, tenantId: string, users: Record<string, string>) {
   const has = await db.query<{ n: number }>(`select count(*)::int as n from public.products where tenant_id = $1`, [tenantId]);
   if ((has.rows[0]?.n ?? 0) > 0) { console.log("✓ Módulos demo ya existen"); return; }
+  // An empty catalog that once had products was emptied on purpose: don't refill it on every boot.
+  const cleared = await db.query(`select 1 from public.audit_logs where tenant_id = $1 and entity_type = 'products' and action = 'delete' limit 1`, [tenantId]);
+  if ((cleared.rowCount ?? 0) > 0) { console.log("✓ Catálogo vaciado a propósito: no se siembran módulos demo"); return; }
 
   const branches = (await db.query<{ id: string; code: string }>(`select id, code from public.branches where tenant_id = $1 order by is_main desc`, [tenantId])).rows;
   const cat = new Map((await db.query<{ id: string; code: string }>(`select id, code from public.product_categories where tenant_id = $1`, [tenantId])).rows.map((r) => [r.code, r.id]));
