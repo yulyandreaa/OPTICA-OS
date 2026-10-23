@@ -1,21 +1,21 @@
 "use client";
-import { Loader2, Pencil, Star, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { deleteBranchAction, setMainBranchAction } from "../actions";
+import { deleteBranchAction } from "../actions";
 import { BranchFields, type BranchValues } from "./branch-form";
 
 /**
- * Per-branch buttons: edit, make it the main branch, delete. With a single branch only editing applies.
+ * Per-branch buttons: edit (where the main branch is chosen) and delete. With a single branch only editing applies.
  * `blocker` is the reason it can't be deleted (already in plain words), so the dialog explains instead of failing after the click.
  */
 export function BranchActions({ branch, isMain, single, blocker }: { branch: BranchValues; isMain: boolean; single: boolean; blocker: string | null }) {
   const { id, name } = branch;
   const router = useRouter();
-  const [confirm, setConfirm] = useState<"edit" | "main" | "delete" | null>(null);
+  const [confirm, setConfirm] = useState<"edit" | "delete" | null>(null);
   const [pending, startTransition] = useTransition();
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string; message?: string }>) => startTransition(async () => {
@@ -29,7 +29,6 @@ export function BranchActions({ branch, isMain, single, blocker }: { branch: Bra
   return (
     <>
       <div className="flex shrink-0 flex-wrap justify-end gap-1">
-        {!single && !isMain && <Button variant="outline" size="sm" onClick={() => setConfirm("main")}><Star /> Hacer principal</Button>}
         <Button variant="ghost" size="sm" onClick={() => setConfirm("edit")}><Pencil /> Editar</Button>
         {!single && (
           <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" aria-label={`Eliminar ${name}`} title="Eliminar sede"
@@ -40,20 +39,7 @@ export function BranchActions({ branch, isMain, single, blocker }: { branch: Bra
       <Dialog open={confirm === "edit"} onOpenChange={(o) => !o && setConfirm(null)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>Editar sede</DialogTitle><DialogDescription>Los cambios se ven en todo el sistema: menú, agenda, ventas e impresos.</DialogDescription></DialogHeader>
-          <BranchFields branch={branch} onDone={() => setConfirm(null)} onCancel={() => setConfirm(null)} />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={confirm === "main"} onOpenChange={(o) => !o && setConfirm(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>¿Hacer «{name}» la sede principal?</DialogTitle>
-            <DialogDescription>Aparecerá primero en las listas y será la sede con la que empiezan los usuarios. La sede principal actual pasa a ser una sede más.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" disabled={pending} onClick={() => setConfirm(null)}>Cancelar</Button>
-            <Button disabled={pending} onClick={() => run(() => setMainBranchAction(id))}>{pending ? <Loader2 className="animate-spin" /> : <Star />} Hacer principal</Button>
-          </DialogFooter>
+          <BranchFields branch={branch} main={single ? undefined : { isMain }} onDone={() => setConfirm(null)} onCancel={() => setConfirm(null)} />
         </DialogContent>
       </Dialog>
 
