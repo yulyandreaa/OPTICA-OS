@@ -1,5 +1,5 @@
 "use client";
-import { AlertTriangle, Building2, Loader2, Minus, Package, Plus, Save, ShoppingCart, Trash2, UserRound, Wallet } from "lucide-react";
+import { AlertTriangle, Loader2, MessageSquarePlus, Minus, PackageSearch, Percent, Plus, Save, ShoppingCart, Trash2, UserRound, Wallet, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -16,13 +16,18 @@ import { CustomerPicker } from "./customer-picker";
 import { PaymentDialog, type PaymentPlan } from "./payment-dialog";
 import { ProductPicker } from "./product-picker";
 
-export type SaleLine = { product: SaleProduct; quantity: number; discount: number };
-export type DraftData = { id: string; number: string; branchId: string; customer: CustomerHit | null; sellerId: string; notes: string; lines: SaleLine[] };
+/** A discount is typed as a percentage or a peso amount; the server always receives the peso amount per line. */
+type DiscountMode = "percent" | "amount";
+export type SaleLine = { product: SaleProduct; quantity: number; discountMode: DiscountMode; discountValue: number };
+export type DraftData = { id: string; number: string; branchId: string; customer: CustomerHit | null; sellerId: string; notes: string;
+  lines: { product: SaleProduct; quantity: number; discount: number }[] };
 
-const money = (s: string) => Number(s.replace(/[^\d]/g, "")) || 0;
+const digits = (s: string) => Number(s.replace(/[^\d]/g, "")) || 0;
+const gross = (l: SaleLine) => l.quantity * l.product.price;
+const discountOf = (l: SaleLine) => Math.min(gross(l), l.discountMode === "percent" ? Math.round((gross(l) * l.discountValue) / 100) : l.discountValue);
 
 /**
- * "Nueva venta": branch, customer, products and conditions on the left; a summary that stays in view on the right.
+ * "Nueva venta": who and where on top, then the products with their discounts; a summary that stays in view on the right.
  * Totals here are a preview with the same math as the database, which recalculates everything from the catalog on save.
  */
 export function NewSale({ branches, initialBranchId, sellers, me, discountBranches, canCreateCustomer, initialCustomer, draft }: {
@@ -34,11 +39,14 @@ export function NewSale({ branches, initialBranchId, sellers, me, discountBranch
   const [customer, setCustomer] = useState<CustomerHit | null>(draft?.customer ?? initialCustomer);
   const [sellerId, setSellerId] = useState(draft?.sellerId ?? me);
   const [notes, setNotes] = useState(draft?.notes ?? "");
-  const [lines, setLines] = useState<SaleLine[]>(draft?.lines ?? []);
+  const [showNotes, setShowNotes] = useState(!!draft?.notes);
+  const [lines, setLines] = useState<SaleLine[]>(() => (draft?.lines ?? []).map((l) => ({ product: l.product, quantity: l.quantity, discountMode: "amount", discountValue: l.discount })));
   const [draftId, setDraftId] = useState(draft?.id ?? null);
   const [draftNumber, setDraftNumber] = useState(draft?.number ?? null);
   const [dirty, setDirty] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [globalOpen, setGlobalOpen] = useState(false);
+  const [globalPct, setGlobalPct] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [saving, startSaving] = useTransition();
   const [confirming, startConfirming] = useTransition();
@@ -72,21 +80,23 @@ export function NewSale({ branches, initialBranchId, sellers, me, discountBranch
         if (p.available !== null && existing.quantity >= p.available) { toast.error(`No hay más unidades de ${p.name} en ${branchName}`); return ls; }
         return ls.map((l) => (l === existing ? { ...l, quantity: l.quantity + 1, product: p } : l));
       }
-      return [...ls, { product: p, quantity: 1, discount: 0 }];
+      return [...ls, { product: p, quantity: 1, discountMode: "percent", discountValue: 0 }];
     });
   };
   const update = (i: number, patch: Partial<SaleLine>) => { touch(); setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l))); };
   const remove = (i: number) => { touch(); setLines((ls) => ls.filter((_, j) => j !== i)); };
   const inCart = (variantId: string) => lines.find((l) => l.product.variantId === variantId)?.quantity ?? 0;
+  const applyGlobal = (pct: number) => { touch(); setLines((ls) => ls.map((l) => ({ ...l, discountMode: "percent", discountValue: pct }))); setGlobalOpen(false); setGlobalPct(""); };
 
   const totals = useMemo(() => lines.reduce((acc, l) => {
-    const t = lineTotals(l.quantity, l.product.price, l.discount, l.product.taxRate);
-    return { gross: acc.gross + l.quantity * l.product.price, discount: acc.discount + l.discount, tax: acc.tax + t.tax, total: acc.total + t.total };
-  }, { gross: 0, discount: 0, tax: 0, total: 0 }), [lines]);
+    const d = discountOf(l);
+    const t = lineTotals(l.quantity, l.product.price, d, l.product.taxRate);
+    return { gross: acc.gross + gross(l), discount: acc.discount + d, tax: acc.tax + t.tax, total: acc.total + t.total, units: acc.units + l.quantity };
+  }, { gross: 0, discount: 0, tax: 0, total: 0, units: 0 }), [lines]);
   const short = lines.filter((l) => l.product.available !== null && l.quantity > l.product.available);
-  const badDiscount = lines.some((l) => l.discount > l.quantity * l.product.price);
-  const blocked = lines.length === 0 || short.length > 0 || badDiscount || refreshing;
-  const items = lines.map((l) => ({ variantId: l.product.variantId, quantity: l.quantity, discount: l.discount }));
+  const badPercent = lines.some((l) => l.discountMode === "percent" && l.discountValue > 100);
+  const blocked = lines.length === 0 || short.length > 0 || badPercent || refreshing;
+  const items = lines.map((l) => ({ variantId: l.product.variantId, quantity: l.quantity, discount: discountOf(l) }));
 
   const saveDraft = () => startSaving(async () => {
     const res = await saveSaleDraftAction({ draftId: draftId ?? undefined, branchId, patientId: customer?.id ?? null, sellerId, notes: notes.trim() || undefined, items });
@@ -119,120 +129,163 @@ export function NewSale({ branches, initialBranchId, sellers, me, discountBranch
   return (
     <div className="grid grid-cols-1 gap-6 pb-24 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:pb-0">
       <div className="grid min-w-0 gap-6">
-        <Section icon={Building2} title="Sede y asesor">
+        {/* 1. Who and where */}
+        <section className="grid gap-4 rounded-2xl border bg-surface p-5 shadow-soft">
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1.5 text-[13px] font-medium text-foreground/80">Sede de la venta
+            <Field label="Sede">
               {branches.length > 1 ? (
                 <NativeSelect value={branchId} onChange={(e) => void changeBranch(e.target.value)} disabled={refreshing}>
                   {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </NativeSelect>
-              ) : <span className="flex h-9 items-center rounded-lg border bg-muted/40 px-3 text-sm font-normal text-foreground">{branchName}</span>}
-            </label>
-            <label className="grid gap-1.5 text-[13px] font-medium text-foreground/80">Asesor responsable
+              ) : <Static>{branchName}</Static>}
+            </Field>
+            <Field label="Asesor">
               {sellers.length > 1 ? (
                 <NativeSelect value={sellerId} onChange={(e) => { setSellerId(e.target.value); touch(); }}>
                   {sellers.map((s) => <option key={s.id} value={s.id}>{s.id === me ? `${s.name} (tú)` : s.name}</option>)}
                 </NativeSelect>
-              ) : <span className="flex h-9 items-center rounded-lg border bg-muted/40 px-3 text-sm font-normal text-foreground">{sellers[0]?.name ?? "Tú"}</span>}
-            </label>
+              ) : <Static>{sellers[0]?.name ?? "Tú"}</Static>}
+            </Field>
           </div>
-          <p className="text-xs text-muted-foreground">Las existencias que ves son las de {branchName}. Al confirmar, las unidades salen de esa sede.</p>
-        </Section>
+          <Field label="Cliente">
+            <CustomerPicker value={customer} onChange={(c) => { setCustomer(c); touch(); }} canCreate={canCreateCustomer} />
+          </Field>
+        </section>
 
-        <Section icon={UserRound} title="Cliente">
-          <CustomerPicker value={customer} onChange={(c) => { setCustomer(c); touch(); }} canCreate={canCreateCustomer} />
-        </Section>
-
-        <Section icon={Package} title="Productos y servicios">
+        {/* 2. Products, quantities and discounts */}
+        <section className="grid gap-4 rounded-2xl border bg-surface p-5 shadow-soft">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold">Productos y servicios {lines.length > 0 && <span className="ml-1 rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">{lines.length}</span>}</h2>
+            <span className="text-xs text-muted-foreground">Existencias de {branchName}</span>
+          </div>
           <ProductPicker branchId={branchId} inCart={inCart} onAdd={add} />
-          {lines.length > 0 && (
+
+          {lines.length === 0 ? (
+            <div className="grid place-items-center gap-2 rounded-xl border border-dashed px-4 py-10 text-center">
+              <PackageSearch className="size-7 text-muted-foreground" />
+              <p className="text-sm font-medium">Aún no hay productos en la venta</p>
+              <p className="max-w-sm text-xs text-muted-foreground">Búscalos arriba por nombre, SKU o marca, o escanea el código de barras y presiona Enter.</p>
+            </div>
+          ) : (
             <ul className="divide-y rounded-xl border" aria-label="Productos de la venta">
               {lines.map((l, i) => {
-                const t = lineTotals(l.quantity, l.product.price, l.discount, l.product.taxRate);
+                const d = discountOf(l);
+                const t = lineTotals(l.quantity, l.product.price, d, l.product.taxRate);
                 const over = l.product.available !== null && l.quantity > l.product.available;
                 return (
-                  <li key={l.product.variantId} className="grid gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <ProductThumb imageUrl={l.product.image} colorHex={l.product.colorHex} kind={l.product.kind} className="size-10" />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{l.product.name}{l.product.detail && <span className="font-normal text-muted-foreground"> · {l.product.detail}</span>}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {l.product.sku} · {formatMoney(l.product.price)} c/u · IVA {l.product.taxRate} %
-                          {l.product.available !== null && <> · {l.product.available} en {branchName}</>}
+                  <li key={l.product.variantId} className="grid gap-3 p-4">
+                    <div className="flex items-start gap-3">
+                      <ProductThumb imageUrl={l.product.image} colorHex={l.product.colorHex} kind={l.product.kind} className="size-11" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">{l.product.name}{l.product.detail && <span className="font-normal text-muted-foreground"> · {l.product.detail}</span>}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {l.product.sku} · <span className={cn(over && "font-medium text-destructive")}>
+                            {l.product.available === null ? "por encargo" : over ? `solo hay ${l.product.available} en ${branchName}` : `${l.product.available} disponibles`}</span>
                         </p>
-                        {over && <p className="mt-0.5 text-xs font-medium text-destructive">Solo hay {l.product.available} en {branchName}.</p>}
                       </div>
+                      <div className="text-right">
+                        <p className="text-base font-semibold tabular">{formatMoney(t.total)}</p>
+                        {d > 0 && <p className="text-xs text-muted-foreground line-through tabular">{formatMoney(gross(l))}</p>}
+                      </div>
+                      <Button type="button" variant="ghost" size="icon-sm" className="-mr-1 text-muted-foreground hover:text-destructive" aria-label={`Quitar ${l.product.name}`} onClick={() => remove(i)}><Trash2 /></Button>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
-                      <div className="flex items-center rounded-lg border" role="group" aria-label={`Cantidad de ${l.product.name}`}>
-                        <Button type="button" variant="ghost" size="icon-sm" aria-label="Quitar una" disabled={l.quantity <= 1} onClick={() => update(i, { quantity: l.quantity - 1 })}><Minus /></Button>
-                        <span className="w-8 text-center text-sm tabular" aria-live="polite">{l.quantity}</span>
-                        <Button type="button" variant="ghost" size="icon-sm" aria-label="Agregar una" disabled={l.product.available !== null && l.quantity >= l.product.available}
-                          onClick={() => update(i, { quantity: l.quantity + 1 })}><Plus /></Button>
-                      </div>
-                      {canDiscount && (
-                        <div className="relative w-28">
-                          <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-xs text-muted-foreground">Desc. $</span>
-                          <Input aria-label={`Descuento de ${l.product.name}`} inputMode="numeric" className={cn("h-8 pl-12 text-right text-sm tabular", l.discount > l.quantity * l.product.price && "border-destructive")}
-                            value={l.discount ? l.discount.toLocaleString("es-CO") : ""} placeholder="0" onChange={(e) => update(i, { discount: money(e.target.value) })} />
+                    <div className="flex flex-wrap items-end gap-x-6 gap-y-3 sm:pl-14">
+                      <Labeled label="Cantidad">
+                        <div className="flex items-center rounded-lg border" role="group" aria-label={`Cantidad de ${l.product.name}`}>
+                          <Button type="button" variant="ghost" size="icon-sm" aria-label="Quitar una" disabled={l.quantity <= 1} onClick={() => update(i, { quantity: l.quantity - 1 })}><Minus /></Button>
+                          <span className="w-8 text-center text-sm tabular" aria-live="polite">{l.quantity}</span>
+                          <Button type="button" variant="ghost" size="icon-sm" aria-label="Agregar una" disabled={l.product.available !== null && l.quantity >= l.product.available}
+                            onClick={() => update(i, { quantity: l.quantity + 1 })}><Plus /></Button>
                         </div>
-                      )}
-                      <span className="w-28 text-right text-sm font-semibold tabular">{formatMoney(t.total)}</span>
-                      <Button type="button" variant="ghost" size="icon-sm" aria-label={`Quitar ${l.product.name}`} onClick={() => remove(i)}><Trash2 /></Button>
+                      </Labeled>
+                      <Labeled label="Precio unit."><span className="flex h-8 items-center text-sm tabular">{formatMoney(l.product.price)}</span></Labeled>
+                      <Labeled label="Descuento">
+                        {canDiscount ? (
+                          <DiscountInput mode={l.discountMode} value={l.discountValue} amount={d} label={l.product.name}
+                            onChange={(mode, value) => update(i, { discountMode: mode, discountValue: value })} />
+                        ) : <span className="flex h-8 items-center text-xs text-muted-foreground">Sin permiso para descuentos</span>}
+                      </Labeled>
+                      <Labeled label="IVA"><span className="flex h-8 items-center text-sm text-muted-foreground tabular">{l.product.taxRate} %</span></Labeled>
                     </div>
                   </li>
                 );
               })}
             </ul>
           )}
-          {badDiscount && <p role="alert" className="text-xs text-destructive">Un descuento supera el valor de su línea.</p>}
-        </Section>
 
-        <Section icon={Wallet} title="Condiciones">
-          <label className="grid gap-1.5 text-[13px] font-medium text-foreground/80">Observaciones <span className="sr-only">opcional</span>
-            <Textarea rows={2} value={notes} onChange={(e) => { setNotes(e.target.value); touch(); }} maxLength={500}
-              placeholder="Ej.: entregar con estuche rígido; el cliente recoge el sábado" />
-          </label>
-          <p className="text-xs text-muted-foreground">El pago, el abono o el saldo con fecha límite se definen en el siguiente paso.</p>
-        </Section>
+          {(lines.length > 0 || showNotes) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {canDiscount && lines.length > 0 && (globalOpen ? (
+                <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-1.5 pl-3">
+                  <span className="text-sm">Descuento a toda la venta</span>
+                  <div className="relative w-20">
+                    <Input autoFocus aria-label="Porcentaje de descuento para toda la venta" inputMode="numeric" className="h-8 pr-6 text-right tabular" value={globalPct}
+                      onChange={(e) => setGlobalPct(String(Math.min(100, digits(e.target.value)) || ""))}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyGlobal(digits(globalPct)); } }} />
+                    <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                  </div>
+                  <Button type="button" size="sm" onClick={() => applyGlobal(digits(globalPct))}>Aplicar</Button>
+                  <Button type="button" size="icon-sm" variant="ghost" aria-label="Cerrar" onClick={() => setGlobalOpen(false)}><X /></Button>
+                </div>
+              ) : (
+                <Button type="button" variant="outline" size="sm" onClick={() => setGlobalOpen(true)}><Percent /> Descuento a toda la venta</Button>
+              ))}
+              {totals.discount > 0 && <Button type="button" variant="ghost" size="sm" className="text-muted-foreground" onClick={() => applyGlobal(0)}>Quitar descuentos</Button>}
+              {!showNotes && <Button type="button" variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setShowNotes(true)}><MessageSquarePlus /> Agregar observaciones</Button>}
+            </div>
+          )}
+          {showNotes && (
+            <label className="grid gap-1.5 text-[13px] font-medium text-foreground/80">Observaciones
+              <Textarea rows={2} value={notes} onChange={(e) => { setNotes(e.target.value); touch(); }} maxLength={500} placeholder="Ej.: entregar con estuche rígido; el cliente recoge el sábado" />
+            </label>
+          )}
+          {badPercent && <p role="alert" className="text-xs text-destructive">Un descuento no puede superar el 100 %.</p>}
+        </section>
       </div>
 
+      {/* 3. Summary */}
       <aside className="lg:sticky lg:top-20">
-        <div className="rounded-2xl border bg-surface p-5 shadow-soft">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-sm font-semibold"><ShoppingCart className="size-4" /> Resumen de la venta</h2>
+        <div className="rounded-2xl border bg-surface shadow-soft">
+          <div className="flex items-center justify-between border-b px-5 py-4">
+            <h2 className="flex items-center gap-2 text-sm font-semibold"><ShoppingCart className="size-4" /> Resumen</h2>
             {draftNumber && <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">{draftNumber}</span>}
           </div>
-          <dl className="grid gap-2 text-sm">
-            <Row label={`Subtotal (${lines.reduce((a, l) => a + l.quantity, 0)} ${lines.reduce((a, l) => a + l.quantity, 0) === 1 ? "unidad" : "unidades"})`} value={formatMoney(totals.gross)} />
-            <Row label="Descuentos" value={totals.discount ? `− ${formatMoney(totals.discount)}` : formatMoney(0)} />
-            <Row label="IVA incluido" value={formatMoney(totals.tax)} muted />
-            <div className="mt-1 flex items-baseline justify-between border-t pt-3">
-              <dt className="font-medium">Total</dt><dd className="text-2xl font-semibold tabular">{formatMoney(totals.total)}</dd>
+          <div className="grid gap-4 p-5">
+            <div className="flex items-center gap-2 text-sm">
+              <UserRound className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 truncate">{customer?.full_name ?? <span className="text-muted-foreground">Venta de mostrador</span>}</span>
+              <span className="ml-auto shrink-0 text-xs text-muted-foreground">{branchName}</span>
             </div>
-          </dl>
-          {short.length > 0 && (
-            <p role="alert" className="mt-3 flex gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive"><AlertTriangle className="size-4 shrink-0" />
-              Ajusta las cantidades: {short.map((l) => l.product.name).join(", ")} sin unidades suficientes en {branchName}.</p>
-          )}
-          <div className="mt-4 grid gap-2">
-            <Button size="lg" disabled={blocked || saving} onClick={() => setPaying(true)}><Wallet /> Continuar al pago</Button>
-            <Button variant="outline" disabled={saving || (lines.length === 0 && !customer)} onClick={saveDraft}>
-              {saving ? <Loader2 className="animate-spin" /> : <Save />} {draftId ? "Actualizar borrador" : "Guardar borrador"}
-            </Button>
-            {(draftId || lines.length > 0) && (
-              <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={saving} onClick={discard}>
-                {draftId ? "Descartar borrador" : "Vaciar venta"}
-              </Button>
+            <dl className="grid gap-2 text-sm">
+              <Row label={`Subtotal · ${totals.units} ${totals.units === 1 ? "unidad" : "unidades"}`} value={formatMoney(totals.gross)} />
+              <Row label={totals.discount > 0 ? `Descuentos (${Math.round((totals.discount / totals.gross) * 100)} %)` : "Descuentos"}
+                value={totals.discount ? `− ${formatMoney(totals.discount)}` : formatMoney(0)} accent={totals.discount > 0} />
+              <Row label="IVA incluido" value={formatMoney(totals.tax)} muted />
+              <div className="mt-1 flex items-baseline justify-between border-t pt-3">
+                <dt className="font-medium">Total</dt><dd className="text-2xl font-semibold tabular">{formatMoney(totals.total)}</dd>
+              </div>
+            </dl>
+            {short.length > 0 && (
+              <p role="alert" className="flex gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive"><AlertTriangle className="size-4 shrink-0" />
+                Ajusta las cantidades: {short.map((l) => l.product.name).join(", ")} sin unidades suficientes en {branchName}.</p>
             )}
+            <div className="grid gap-2">
+              <Button size="lg" disabled={blocked || saving} onClick={() => setPaying(true)}><Wallet /> Continuar al pago</Button>
+              <Button variant="outline" disabled={saving || (lines.length === 0 && !customer)} onClick={saveDraft}>
+                {saving ? <Loader2 className="animate-spin" /> : <Save />} {draftId ? "Actualizar borrador" : "Guardar borrador"}
+              </Button>
+              {(draftId || lines.length > 0) && (
+                <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={saving} onClick={discard}>{draftId ? "Descartar borrador" : "Vaciar venta"}</Button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">Precios con IVA incluido. Al confirmar, el sistema recalcula los totales y revisa de nuevo las existencias.</p>
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">Precios con IVA incluido, tomados del catálogo. Al confirmar, el sistema recalcula los totales y vuelve a revisar las existencias.</p>
         </div>
       </aside>
 
       <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t bg-surface/95 px-4 py-3 shadow-soft backdrop-blur lg:hidden">
         <div className="min-w-0 flex-1">
-          <p className="text-xs text-muted-foreground">{lines.length} {lines.length === 1 ? "producto" : "productos"}</p>
+          <p className="text-xs text-muted-foreground">{totals.units} {totals.units === 1 ? "unidad" : "unidades"}{totals.discount > 0 && ` · − ${formatMoney(totals.discount)}`}</p>
           <p className="text-lg font-semibold tabular">{formatMoney(totals.total)}</p>
         </div>
         <Button disabled={blocked || saving} onClick={() => setPaying(true)}><Wallet /> Continuar al pago</Button>
@@ -244,15 +297,42 @@ export function NewSale({ branches, initialBranchId, sellers, me, discountBranch
   );
 }
 
-function Section({ icon: Icon, title, children }: { icon: typeof Package; title: string; children: React.ReactNode }) {
+function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div className="grid gap-1"><span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{label}</span>{children}</div>;
+}
+
+/** Discount per line in % or $; shows what it is worth in pesos. */
+function DiscountInput({ mode, value, amount, label, onChange }: { mode: DiscountMode; value: number; amount: number; label: string; onChange: (m: DiscountMode, v: number) => void }) {
   return (
-    <section className="grid gap-4 rounded-2xl border bg-surface p-5 shadow-soft">
-      <h2 className="flex items-center gap-2 text-sm font-semibold"><Icon className="size-4 text-muted-foreground" />{title}</h2>
-      {children}
-    </section>
+    <div className="flex items-center gap-1.5">
+      <div className="flex shrink-0 rounded-lg border p-0.5" role="group" aria-label={`Tipo de descuento de ${label}`}>
+        {(["percent", "amount"] as const).map((m) => (
+          <button key={m} type="button" aria-pressed={mode === m} onClick={() => onChange(m, 0)}
+            className={cn("h-6 w-6 rounded-md text-xs font-medium", mode === m ? "bg-brand text-white" : "text-muted-foreground hover:bg-muted")}>{m === "percent" ? "%" : "$"}</button>
+        ))}
+      </div>
+      <div className="relative w-32">
+        <Input aria-label={`Descuento de ${label}`} inputMode="numeric" className="h-8 text-right text-sm tabular" placeholder="0"
+          value={value ? (mode === "amount" ? value.toLocaleString("es-CO") : String(value)) : ""}
+          onChange={(e) => onChange(mode, mode === "percent" ? Math.min(100, digits(e.target.value)) : digits(e.target.value))} />
+        {mode === "percent" && amount > 0 && <p className="absolute top-full right-0 mt-0.5 text-[11px] whitespace-nowrap text-success tabular">− {formatMoney(amount)}</p>}
+      </div>
+    </div>
   );
 }
 
-function Row({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
-  return <div className={cn("flex justify-between gap-3", muted && "text-muted-foreground")}><dt className={cn(!muted && "text-muted-foreground")}>{label}</dt><dd className="tabular">{value}</dd></div>;
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div className="grid gap-1.5"><span className="text-[13px] font-medium text-foreground/80">{label}</span>{children}</div>;
+}
+
+function Static({ children }: { children: React.ReactNode }) {
+  return <span className="flex h-9 items-center rounded-lg border bg-muted/40 px-3 text-sm">{children}</span>;
+}
+
+function Row({ label, value, muted, accent }: { label: string; value: string; muted?: boolean; accent?: boolean }) {
+  return (
+    <div className={cn("flex justify-between gap-3", muted && "text-muted-foreground")}>
+      <dt className={cn(!muted && "text-muted-foreground")}>{label}</dt><dd className={cn("tabular", accent && "font-medium text-success")}>{value}</dd>
+    </div>
+  );
 }

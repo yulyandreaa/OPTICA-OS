@@ -104,8 +104,13 @@ describe("golden path", () => {
     expect(Number(lvl.quantity)).toBe(2);
   });
 
-  it("la asesora sin permiso no puede aplicar descuentos ni sobrepagar", async () => {
+  it("un rol sin permiso de descuentos no puede aplicarlos y nadie sobrepaga", async () => {
+    // Asesores comerciales sí descuentan (decisión del negocio); se prueba quitando el permiso a la asesora en esta empresa.
+    await db.query(`delete from public.user_roles where tenant_id = $1 and user_id = $2`, [tenant, sales]);
+    await db.query(`insert into public.user_roles (tenant_id, user_id, role_id) select $1, $2, id from public.roles where code = 'CASHIER' and tenant_id is null`, [tenant, sales]);
     expect(await expectDenied(db, sales, `select public.create_sale($1)`, [{ tenant_id: tenant, branch_id: branch, items: [{ variant_id: frameVariant, quantity: 1, discount: 50000 }] }])).toMatch(/DISCOUNT_FORBIDDEN/);
+    await db.query(`delete from public.user_roles where tenant_id = $1 and user_id = $2`, [tenant, sales]);
+    await db.query(`insert into public.user_roles (tenant_id, user_id, role_id) select $1, $2, id from public.roles where code = 'SALES_REP' and tenant_id is null`, [tenant, sales]);
     expect(await expectDenied(db, sales, `select public.add_sale_payment($1, $2)`, [saleId, [{ method: "cash", amount: 999999 }]])).toMatch(/PAYMENT_EXCEEDS_TOTAL/);
   });
 
