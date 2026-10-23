@@ -2,9 +2,8 @@ import { Building2 } from "lucide-react";
 import type { Metadata } from "next";
 import { Panel } from "@/components/shared/panel";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { humanizeError } from "@/lib/errors";
 import { createClient } from "@/lib/supabase/server";
-import { BranchActions } from "@/modules/settings/components/branch-actions";
+import { BranchActions, type BranchDeleteImpact } from "@/modules/settings/components/branch-actions";
 import { BranchForm } from "@/modules/settings/components/branch-form";
 import { requirePermission } from "@/modules/tenants/services/context";
 
@@ -21,10 +20,10 @@ export default async function BranchesPage() {
   const max = limit?.limit_value ?? null;
   const list = branches ?? [];
   const single = list.length <= 1;
-  // Why each branch can't be deleted (if anything), so the dialog explains before the click.
-  const blockers = new Map(single ? [] : await Promise.all(list.map(async (b) => {
-    const { data } = await db.rpc("branch_delete_blocker", { p_tenant: ctx.tenant.id, p_branch: b.id });
-    return [b.id, data ? humanizeError({ message: data }) : null] as const;
+  // What deleting each branch would move or cancel, so the confirmation says it before the click.
+  const impacts = new Map(single ? [] : await Promise.all(list.map(async (b) => {
+    const { data } = await db.rpc("branch_delete_impact", { p_tenant: ctx.tenant.id, p_branch: b.id });
+    return [b.id, (data as BranchDeleteImpact | null) ?? null] as const;
   })));
   return (
     <div className="grid gap-4">
@@ -38,7 +37,7 @@ export default async function BranchesPage() {
                 <p className="truncate text-xs text-muted-foreground">{[b.address, b.city, b.phone].filter(Boolean).join(" · ") || "Sin dirección"}</p>
               </div>
               {b.is_main && <StatusBadge tone="brand" dot={false}>Principal</StatusBadge>}
-              <BranchActions branch={b} isMain={b.is_main} single={single} blocker={blockers.get(b.id) ?? null} />
+              <BranchActions branch={b} isMain={b.is_main} single={single} impact={impacts.get(b.id) ?? null} />
             </li>
           ))}
         </ul>

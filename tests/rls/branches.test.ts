@@ -29,6 +29,7 @@ describe("sedes", () => {
   afterAll(async () => { await db?.end(); });
 
   it("con una sola sede no se puede eliminar", async () => {
+    expect(await expectDenied(db, sales, `select public.delete_branch($1, $2)`, [tenant, main])).toMatch(/FORBIDDEN/);
     expect(await blocker(main)).toBe("BRANCH_LAST");
     expect(await expectDenied(db, owner, `select public.delete_branch($1, $2)`, [tenant, main])).toMatch(/BRANCH_LAST/);
   });
@@ -42,19 +43,29 @@ describe("sedes", () => {
     expect(await expectDenied(db, outsider, `select public.set_main_branch($1, $2)`, [tenant, main])).toMatch(/FORBIDDEN/);
   });
 
-  it("la principal no se elimina y un usuario asignado solo a esa sede la bloquea", async () => {
-    expect(await expectDenied(db, owner, `select public.delete_branch($1, $2)`, [tenant, north])).toMatch(/BRANCH_IS_MAIN/);
-    await db.query(`insert into public.user_roles (tenant_id, user_id, role_id, branch_id) select $1, $2, id, $3 from public.roles where code = 'SALES_REP' and tenant_id is null`, [tenant, sales, south]);
-    expect(await blocker(south)).toBe("BRANCH_HAS_USERS");
-    await db.query(`insert into public.user_roles (tenant_id, user_id, role_id, branch_id) select $1, $2, id, $3 from public.roles where code = 'SALES_REP' and tenant_id is null`, [tenant, sales, main]);
-    expect(await blocker(south)).toBeNull();
+  it("eliminar la principal con existencias y un usuario: todo pasa a otra sede", async () => {
+    const frames = (await db.query<{ id: string }>(`select id from public.product_categories where tenant_id = $1 and code = 'frames'`, [tenant])).rows[0]!.id;
+    const product = (await one<{ id: string }>(owner, `select public.save_product($1) as id`, [{ tenant_id: tenant, category_id: frames, name: "Aurora", tax_rate: 19,
+      is_stocked: true, unit: "unidad", default_min_stock: 1, variants: [{ price: 100000, cost: 40000 }], initial_stock: [{ variant: 0, branch_id: north, quantity: 5 }] }])).id;
+    const variant = (await db.query<{ id: string }>(`select id from public.product_variants where product_id = $1`, [product])).rows[0]!.id;
+    await db.query(`insert into public.user_roles (tenant_id, user_id, role_id, branch_id) select $1, $2, id, $3 from public.roles where code = 'SALES_REP' and tenant_id is null`, [tenant, sales, north]);
+    const impact = await one<{ i: Record<string, unknown> }>(owner, `select public.branch_delete_impact($1, $2) as i`, [tenant, north]);
+    expect(impact.i).toMatchObject({ target: "Centro", becomes_main: true, units: 5, users: 1 });
+    expect(await blocker(north)).toBeNull();
+
+    await one(owner, `select public.delete_branch($1, $2)`, [tenant, north]);
+    expect(await mainId()).toEqual([main]);
+    const qty = async (b: string) => Number((await db.query<{ q: string }>(`select quantity as q from public.inventory_levels where branch_id = $1 and variant_id = $2`, [b, variant])).rows[0]?.q ?? 0);
+    expect(await qty(north)).toBe(0);
+    expect(await qty(main)).toBe(5);
+    const roles = (await db.query<{ branch_id: string }>(`select branch_id from public.user_roles where tenant_id = $1 and user_id = $2`, [tenant, sales])).rows;
+    expect(roles.map((r) => r.branch_id)).toEqual([main]);
   });
 
   it("eliminar archiva la sede, quita sus roles y libera el código", async () => {
     await one(owner, `select public.delete_branch($1, $2)`, [tenant, south]);
     const row = (await db.query<{ deleted: boolean; status: string }>(`select deleted_at is not null as deleted, status from public.branches where id = $1`, [south])).rows[0]!;
     expect(row).toEqual({ deleted: true, status: "inactive" });
-    expect((await db.query(`select 1 from public.user_roles where branch_id = $1`, [south])).rowCount).toBe(0);
     await one(owner, `insert into public.branches (tenant_id, name, code) values ($1, 'Sur nueva', 'SUR') returning id`, [tenant]);
     expect(await expectDenied(db, owner, `select public.delete_branch($1, $2)`, [tenant, south])).toMatch(/BRANCH_NOT_FOUND/);
   });

@@ -8,11 +8,23 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { deleteBranchAction } from "../actions";
 import { BranchFields, type BranchValues } from "./branch-form";
 
-/**
- * Per-branch buttons: edit (where the main branch is chosen) and delete. With a single branch only editing applies.
- * `blocker` is the reason it can't be deleted (already in plain words), so the dialog explains instead of failing after the click.
- */
-export function BranchActions({ branch, isMain, single, blocker }: { branch: BranchValues; isMain: boolean; single: boolean; blocker: string | null }) {
+export type BranchDeleteImpact = { target: string; becomes_main: boolean; units: number; transfers: number; appointments: number; users: number };
+
+const plural = (n: number, one: string, many: string) => `${n.toLocaleString("es-CO")} ${n === 1 ? one : many}`;
+
+/** What the database will do on delete, in plain words (see delete_branch). */
+function consequences(i: BranchDeleteImpact) {
+  return [
+    i.becomes_main && `${i.target} pasa a ser la sede principal.`,
+    i.units > 0 && `${plural(i.units, "unidad", "unidades")} en inventario se trasladan a ${i.target}.`,
+    i.transfers > 0 && `Se cancelan ${plural(i.transfers, "traslado pendiente", "traslados pendientes")}; lo que estaba en camino vuelve a su sede de origen.`,
+    i.appointments > 0 && `Se cancelan ${plural(i.appointments, "cita próxima", "citas próximas")}. Avísales a los pacientes.`,
+    i.users > 0 && `${plural(i.users, "usuario que solo trabajaba aquí pasa", "usuarios que solo trabajaban aquí pasan")} a ${i.target}.`,
+  ].filter((x): x is string => !!x);
+}
+
+/** Per-branch buttons: edit (where the main branch is chosen) and delete. With a single branch only editing applies. */
+export function BranchActions({ branch, isMain, single, impact }: { branch: BranchValues; isMain: boolean; single: boolean; impact: BranchDeleteImpact | null }) {
   const { id, name } = branch;
   const router = useRouter();
   const [confirm, setConfirm] = useState<"edit" | "delete" | null>(null);
@@ -45,28 +57,22 @@ export function BranchActions({ branch, isMain, single, blocker }: { branch: Bra
 
       <Dialog open={confirm === "delete"} onOpenChange={(o) => !o && setConfirm(null)}>
         <DialogContent className="sm:max-w-md">
-          {blocker ? (
-            <>
-              <DialogHeader>
-                <DialogTitle>Todavía no puedes eliminar «{name}»</DialogTitle>
-                <DialogDescription>{blocker}</DialogDescription>
-              </DialogHeader>
-              <DialogFooter><Button variant="outline" onClick={() => setConfirm(null)}>Entendido</Button></DialogFooter>
-            </>
-          ) : (
-            <>
-              <DialogHeader>
-                <DialogTitle>¿Eliminar la sede «{name}»?</DialogTitle>
-                <DialogDescription>
-                  Deja de aparecer en el menú, la agenda, el inventario y las ventas. Las ventas, citas y movimientos que ya se hicieron allí se conservan en los reportes.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button variant="outline" disabled={pending} onClick={() => setConfirm(null)}>Cancelar</Button>
-                <Button variant="destructive" disabled={pending} onClick={() => run(() => deleteBranchAction(id))}>{pending ? <Loader2 className="animate-spin" /> : <Trash2 />} Eliminar sede</Button>
-              </DialogFooter>
-            </>
+          <DialogHeader>
+            <DialogTitle>¿Eliminar la sede «{name}»?</DialogTitle>
+            <DialogDescription>
+              Deja de aparecer en el menú, la agenda, el inventario y las ventas. Las ventas, citas y movimientos que ya se hicieron allí se conservan en los reportes.
+            </DialogDescription>
+          </DialogHeader>
+          {impact && consequences(impact).length > 0 && (
+            <div className="rounded-lg border bg-muted/40 px-3 py-2.5 text-sm">
+              <p className="mb-1 font-medium">Además:</p>
+              <ul className="grid list-disc gap-1 pl-5 text-muted-foreground">{consequences(impact).map((c) => <li key={c}>{c}</li>)}</ul>
+            </div>
           )}
+          <DialogFooter>
+            <Button variant="outline" disabled={pending} onClick={() => setConfirm(null)}>Cancelar</Button>
+            <Button variant="destructive" disabled={pending} onClick={() => run(() => deleteBranchAction(id))}>{pending ? <Loader2 className="animate-spin" /> : <Trash2 />} Eliminar sede</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

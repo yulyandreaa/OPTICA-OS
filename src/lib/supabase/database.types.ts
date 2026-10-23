@@ -2799,6 +2799,7 @@ export type Database = {
       booking_create: { Args: { p_slug: string; p_branch: string; p_type: string; p_specialist: string; p_starts_at: string; p_document_type: string; p_document_number: string; p_first_name: string; p_last_name: string; p_phone: string; p_email: string; p_accept_data_policy: boolean; p_policy_version: string }; Returns: Json }
       booking_slots: { Args: { p_slug: string; p_branch: string; p_type: string; p_date: string; p_specialist?: string }; Returns: { specialist_id: string | null; starts_at: string | null }[] }
       branch_delete_blocker: { Args: { p_tenant: string; p_branch: string }; Returns: string }
+      branch_delete_impact: { Args: { p_tenant: string; p_branch: string }; Returns: Json }
       cancel_transfer: { Args: { p_transfer: string; p_reason?: string }; Returns: string }
       convert_quote: { Args: { p_quote: string; p_payments: Json; p_idempotency_key?: string }; Returns: string }
       create_quote: { Args: { p: Json }; Returns: string }
