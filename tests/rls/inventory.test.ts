@@ -190,6 +190,18 @@ describe("inventario", () => {
     expect(await ids(`null, null, $2`, [contacts])).toEqual(["LC-000001"]);
   });
 
+  it("solo se elimina un producto sin historial; con historial se bloquea y queda auditado", async () => {
+    const blank = await save(owner, { category_id: frames, name: "Borrable", variants: [{ color_name: "Gris", price: 1000 }] });
+    expect((await one<{ h: boolean }>(owner, `select public.product_has_history($1, $2) as h`, [tenant, blank])).h).toBe(false);
+    expect((await one<{ h: boolean }>(owner, `select public.product_has_history($1, $2) as h`, [tenant, frame])).h).toBe(true);
+    expect(await expectDenied(db, sales, `select public.delete_product($1, $2)`, [tenant, blank])).toMatch(/FORBIDDEN/);
+    expect(await expectDenied(db, outsider, `select public.delete_product($1, $2)`, [tenant, blank])).toMatch(/FORBIDDEN/);
+    expect(await expectDenied(db, owner, `select public.delete_product($1, $2)`, [tenant, frame])).toMatch(/PRODUCT_HAS_HISTORY/);
+    await one(owner, `select public.delete_product($1, $2)`, [tenant, blank]);
+    expect((await db.query(`select 1 from public.product_variants where product_id = $1`, [blank])).rowCount).toBe(0);
+    expect((await db.query(`select 1 from public.audit_logs where entity_id = $1 and action = 'delete'`, [blank])).rowCount).toBe(1);
+  });
+
   it("otra empresa no ve ni mueve este inventario", async () => {
     const rows = await asUser(db, outsider, async () => (await db.query(`select * from public.inventory_list($1)`, [tenant])).rowCount);
     expect(rows).toBe(0);

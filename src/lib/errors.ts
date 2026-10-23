@@ -36,6 +36,8 @@ const BY_MESSAGE: Record<string, string> = {
   PRODUCT_NOT_STOCKED: "Este producto no maneja inventario (por ejemplo, un servicio o un lente que se fabrica por orden).",
   PRODUCT_HAS_STOCK: "El producto todavía tiene unidades en alguna sede. Sácalas con un movimiento antes de quitarle el inventario.",
   COSTS_FORBIDDEN: "No tienes permiso para ver ni modificar costos.",
+  PRODUCT_HAS_HISTORY: "Este producto ya tiene movimientos, compras o ventas registradas: no se puede eliminar. Desactívalo para que deje de aparecer.",
+  PRODUCT_NOT_FOUND: "El producto ya no existe.",
   VARIANT_REQUIRED: "Agrega al menos una variante.",
   CATEGORY_NOT_FOUND: "La categoría elegida no existe en tu óptica.",
   REASON_REQUIRED: "Explica el motivo del movimiento.",

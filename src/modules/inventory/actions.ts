@@ -28,6 +28,29 @@ export async function saveProductAction(input: ProductInput): Promise<ActionResu
   return ok({ id: data as string }, v.id ? "Producto actualizado" : "Producto creado");
 }
 
+export async function deleteProductAction(id: string): Promise<ActionResult> {
+  if (!z.uuid().safeParse(id).success) return fail("Producto no válido.");
+  const ctx = await getAppContext();
+  if (!ctx || !can(ctx.grants, "inventory.manage")) return fail("No tienes permiso para eliminar productos.");
+  const db = await createClient();
+  const { error } = await db.rpc("delete_product", { p_tenant: ctx.tenant.id, p_product: id });
+  if (error) return fromError("inventory.delete_product", error);
+  revalidatePath("/inventario", "layout");
+  return ok(undefined, "Producto eliminado");
+}
+
+/** Products with history can't be deleted: deactivating hides them from sales and the catalog but keeps the trail. */
+export async function setProductActiveAction(id: string, active: boolean): Promise<ActionResult> {
+  if (!z.uuid().safeParse(id).success) return fail("Producto no válido.");
+  const ctx = await getAppContext();
+  if (!ctx || !can(ctx.grants, "inventory.manage")) return fail("No tienes permiso para gestionar productos.");
+  const db = await createClient();
+  const { error } = await db.from("products").update({ is_active: active }).eq("id", id).eq("tenant_id", ctx.tenant.id);
+  if (error) return fromError("inventory.set_product_active", error);
+  revalidatePath("/inventario", "layout");
+  return ok(undefined, active ? "Producto activado" : "Producto desactivado: ya no aparece para vender");
+}
+
 export async function recordMovementAction(input: MovementInput): Promise<ActionResult<{ id: string | null }>> {
   const parsed = movementSchema.safeParse(input);
   if (!parsed.success) return fromZod(parsed.error);

@@ -14,6 +14,7 @@ import {
 } from "@/modules/inventory/constants";
 import { MinStockEditor } from "@/modules/inventory/components/min-stock-editor";
 import { MovementTable } from "@/modules/inventory/components/movement-table";
+import { ProductDelete } from "@/modules/inventory/components/product-delete";
 import { ProductThumb, StockBadge } from "@/modules/inventory/components/stock";
 import { getProduct, movementHistory, type ProductDetail } from "@/modules/inventory/repositories";
 import { requirePermission, type AppContext } from "@/modules/tenants/services/context";
@@ -43,6 +44,8 @@ export default async function ProductPage(props: PageProps<"/inventario/[id]">) 
   const first = product.variants.find((v) => v.image_url) ?? product.variants[0];
   const total = product.levels.reduce((a, l) => a + Number(l.quantity), 0);
   const canAdjust = can(ctx.grants, "inventory.adjust");
+  const canManage = can(ctx.grants, "inventory.manage");
+  const hasHistory = canManage ? (await db.rpc("product_has_history", { p_tenant: ctx.tenant.id, p_product: id })).data ?? true : true;
 
   return (
     <div className="grid grid-cols-1 gap-6">
@@ -62,7 +65,8 @@ export default async function ProductPage(props: PageProps<"/inventario/[id]">) 
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {can(ctx.grants, "inventory.manage") && <Link href={`/inventario/${id}/editar`} className={buttonVariants({ variant: "outline" })}><Pencil /> Editar</Link>}
+          {canManage && <Link href={`/inventario/${id}/editar`} className={buttonVariants({ variant: "outline" })}><Pencil /> Editar</Link>}
+          {canManage && <ProductDelete id={id} name={product.name} hasHistory={hasHistory} isActive={product.is_active} />}
           {product.is_stocked && can(ctx.grants, "inventory.transfer") && ctx.branches.length > 1 && (
             <Link href={`/inventario/traslados/nuevo?variante=${product.variants[0]?.id}`} className={buttonVariants({ variant: "outline" })}><ArrowLeftRight /> Trasladar</Link>
           )}
