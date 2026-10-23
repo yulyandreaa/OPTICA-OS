@@ -6,40 +6,63 @@ import { toast } from "sonner";
 import { FormField } from "@/components/shared/form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createBranchAction } from "../actions";
+import { createBranchAction, updateBranchAction } from "../actions";
 
-export function BranchForm() {
+export type BranchValues = { id: string; name: string; code: string; city: string | null; address: string | null; phone: string | null };
+
+/** Fields shared by "Agregar sede" and "Editar"; with `branch` it saves changes to that branch. */
+export function BranchFields({ branch, onDone, onCancel }: { branch?: BranchValues; onDone: () => void; onCancel: () => void }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  if (!open) return <Button variant="outline" onClick={() => setOpen(true)}><Plus /> Agregar sede</Button>;
+  const [errors, setErrors] = useState<Record<string, string[] | undefined>>({});
   return (
     <form
-      className="grid gap-4 rounded-xl border bg-surface p-5 shadow-soft sm:grid-cols-2"
+      className="grid gap-4 sm:grid-cols-2"
       onSubmit={(e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
+        const input = {
+          name: String(fd.get("name")), code: String(fd.get("code")), city: String(fd.get("city")),
+          address: String(fd.get("address")), phone: String(fd.get("phone")),
+        };
         startTransition(async () => {
-          const res = await createBranchAction({
-            name: String(fd.get("name")), code: String(fd.get("code")), city: String(fd.get("city")),
-            address: String(fd.get("address")), phone: String(fd.get("phone")),
-          });
-          if (!res.ok) { toast.error(res.error); return; }
+          const res = branch ? await updateBranchAction(branch.id, input) : await createBranchAction(input);
+          if (!res.ok) { setErrors(res.fieldErrors ?? {}); toast.error(res.error); return; }
           toast.success(res.message);
-          setOpen(false);
+          onDone();
           router.refresh();
         });
       }}
     >
-      <FormField id="name" label="Nombre"><Input id="name" name="name" required placeholder="Cedritos" /></FormField>
-      <FormField id="code" label="Código" hint="Corto, para reportes."><Input id="code" name="code" required placeholder="CED" className="uppercase" /></FormField>
-      <FormField id="city" label="Ciudad"><Input id="city" name="city" /></FormField>
-      <FormField id="phone" label="Teléfono"><Input id="phone" name="phone" /></FormField>
-      <FormField id="address" label="Dirección" className="sm:col-span-2"><Input id="address" name="address" /></FormField>
+      <FormField id={`${branch?.id ?? "new"}-name`} label="Nombre" error={errors.name?.[0]}>
+        <Input id={`${branch?.id ?? "new"}-name`} name="name" required defaultValue={branch?.name} placeholder="Cedritos" />
+      </FormField>
+      <FormField id={`${branch?.id ?? "new"}-code`} label="Código" hint="Corto, para reportes." error={errors.code?.[0]}>
+        <Input id={`${branch?.id ?? "new"}-code`} name="code" required defaultValue={branch?.code} placeholder="CED" className="uppercase" />
+      </FormField>
+      <FormField id={`${branch?.id ?? "new"}-city`} label="Ciudad" optional>
+        <Input id={`${branch?.id ?? "new"}-city`} name="city" defaultValue={branch?.city ?? ""} />
+      </FormField>
+      <FormField id={`${branch?.id ?? "new"}-phone`} label="Teléfono" optional>
+        <Input id={`${branch?.id ?? "new"}-phone`} name="phone" defaultValue={branch?.phone ?? ""} />
+      </FormField>
+      <FormField id={`${branch?.id ?? "new"}-address`} label="Dirección" optional className="sm:col-span-2">
+        <Input id={`${branch?.id ?? "new"}-address`} name="address" defaultValue={branch?.address ?? ""} />
+      </FormField>
       <div className="flex justify-end gap-2 sm:col-span-2">
-        <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-        <Button type="submit" disabled={pending}>{pending && <Loader2 className="animate-spin" />} Crear sede</Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>Cancelar</Button>
+        <Button type="submit" disabled={pending}>{pending && <Loader2 className="animate-spin" />} {branch ? "Guardar cambios" : "Crear sede"}</Button>
       </div>
     </form>
+  );
+}
+
+export function BranchForm() {
+  const [open, setOpen] = useState(false);
+  if (!open) return <Button variant="outline" onClick={() => setOpen(true)}><Plus /> Agregar sede</Button>;
+  return (
+    <div className="rounded-xl border bg-surface p-5 shadow-soft">
+      <BranchFields onDone={() => setOpen(false)} onCancel={() => setOpen(false)} />
+    </div>
   );
 }

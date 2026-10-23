@@ -21,7 +21,7 @@ export default async function BranchesPage() {
   const max = limit?.limit_value ?? null;
   const list = branches ?? [];
   const single = list.length <= 1;
-  // Why each branch can't be deleted (if anything), so the menu explains before the click.
+  // Why each branch can't be deleted (if anything), so the dialog explains before the click.
   const blockers = new Map(single ? [] : await Promise.all(list.map(async (b) => {
     const { data } = await db.rpc("branch_delete_blocker", { p_tenant: ctx.tenant.id, p_branch: b.id });
     return [b.id, data ? humanizeError({ message: data }) : null] as const;
@@ -31,21 +31,21 @@ export default async function BranchesPage() {
       <Panel title="Sedes" description={max ? `${list.length} de ${max} sedes incluidas en tu plan ${ctx.subscription?.planName}` : list.length === 1 ? "1 sede" : `${list.length} sedes`} bodyClassName="p-0">
         <ul className="divide-y">
           {list.map((b) => (
-            <li key={b.id} className="flex items-center gap-4 px-4 py-3">
+            <li key={b.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
               <div className="grid size-9 place-items-center rounded-lg bg-muted"><Building2 className="size-4 text-muted-foreground" /></div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{b.name} <span className="font-mono text-xs text-muted-foreground">{b.code}</span></p>
                 <p className="truncate text-xs text-muted-foreground">{[b.address, b.city, b.phone].filter(Boolean).join(" · ") || "Sin dirección"}</p>
               </div>
               {b.is_main && <StatusBadge tone="brand" dot={false}>Principal</StatusBadge>}
-              {!single && <BranchActions id={b.id} name={b.name} isMain={b.is_main} blocker={blockers.get(b.id) ?? null} />}
+              <BranchActions branch={b} isMain={b.is_main} single={single} blocker={blockers.get(b.id) ?? null} />
             </li>
           ))}
         </ul>
         <p className="border-t px-4 py-3 text-xs text-muted-foreground">
           {single
-            ? "Tienes una sola sede y es tu sede principal. Si abres otra, desde aquí podrás elegir cuál es la principal o eliminar las que ya no uses."
-            : "La sede principal aparece primero en las listas. Usa el menú ⋯ de cada sede para cambiar la principal o eliminar una sede."}
+            ? "Tienes una sola sede y es tu sede principal. Si abres otra, aquí podrás elegir cuál es la principal o eliminar las que ya no uses."
+            : "La sede principal aparece primero en las listas y es con la que empiezan los usuarios."}
         </p>
       </Panel>
       <div><BranchForm /></div>

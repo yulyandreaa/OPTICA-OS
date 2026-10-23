@@ -53,6 +53,20 @@ export async function createBranchAction(input: z.input<typeof branchSchema>): P
   return ok(undefined, "Sede creada");
 }
 
+export async function updateBranchAction(branchId: string, input: z.input<typeof branchSchema>): Promise<ActionResult> {
+  if (!z.uuid().safeParse(branchId).success) return fail("Sede no válida.");
+  const ctx = await getAppContext();
+  if (!ctx || !can(ctx.grants, "branches.manage")) return fail("No tienes permiso para editar sedes.");
+  const parsed = branchSchema.safeParse(input);
+  if (!parsed.success) return fromZod(parsed.error);
+  const db = await createClient();
+  const { data, error } = await db.from("branches").update(parsed.data).eq("id", branchId).eq("tenant_id", ctx.tenant.id).is("deleted_at", null).select("id");
+  if (error) return fromError("settings.update_branch", error);
+  if (!data?.length) return fail("La sede ya no existe.");
+  revalidatePath("/", "layout");
+  return ok(undefined, "Sede actualizada");
+}
+
 export async function setMainBranchAction(branchId: string): Promise<ActionResult> {
   if (!z.uuid().safeParse(branchId).success) return fail("Sede no válida.");
   const ctx = await getAppContext();
