@@ -1,8 +1,8 @@
 "use client";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { Controller, useFieldArray, useForm, useWatch, type FieldPath } from "react-hook-form";
+import { Controller, useForm, useWatch, type FieldPath } from "react-hook-form";
 import { toast } from "sonner";
 import { FormField } from "@/components/shared/form-field";
 import { FormSection } from "@/components/shared/form-section";
@@ -18,7 +18,7 @@ import {
   type Kind, type Unit,
 } from "../constants";
 import { productSchema, type ProductInput } from "../schemas";
-import { EMPTY_VARIANT, type ProductFormValues, type VariantValues } from "../utils/form-values";
+import type { ProductFormValues } from "../utils/form-values";
 
 /** "300.000" / "$ 300 000" → 300000; empty → undefined. */
 const money = (s: string) => (s.replace(/[^\d]/g, "") === "" ? undefined : Number(s.replace(/[^\d]/g, "")));
@@ -37,10 +37,10 @@ export function ProductForm({ productId, defaults, originalCosts = {}, categorie
   const [idempotencyKey] = useState(() => crypto.randomUUID());
   const form = useForm<ProductFormValues>({ defaultValues: defaults });
   const { register, control, setValue, setError } = form;
-  // keyName "key": the variants carry their own database `id`.
-  const variants = useFieldArray({ control, name: "variants", keyName: "key" });
-  const watchedVariants = useWatch({ control, name: "variants" });
-  const [categoryId, isStocked, trackLots, unit] = useWatch({ control, name: ["category_id", "is_stocked", "track_lots", "unit"] });
+  // One product = one sellable item: the form edits the first variant. Older products with several keep the rest untouched.
+  const main = useWatch({ control, name: "variants.0" });
+  const extraVariants = defaults.variants.length - 1;
+  const [categoryId, isStocked, trackLots, unit, taxRate] = useWatch({ control, name: ["category_id", "is_stocked", "track_lots", "unit", "tax_rate"] });
   const kind: Kind = categories.find((c) => c.id === categoryId)?.kind ?? "supply";
   const creating = !productId;
   const err = (name: string): string | undefined => {
@@ -78,7 +78,7 @@ export function ProductForm({ productId, defaults, originalCosts = {}, categorie
         cost: canCosts && x.cost.trim() !== "" && x.cost !== (originalCosts[i] ?? "") ? money(x.cost) : undefined,
         is_active: x.is_active,
       })),
-      initial_stock: creating && v.is_stocked && canAdjust ? variants.fields.flatMap((f, vi) => branches.map((b) => {
+      initial_stock: creating && v.is_stocked && canAdjust ? [0].flatMap((vi) => branches.map((b) => {
         const key = `${vi}:${b.id}`;
         const c = v.initial[key];
         const quantity = int(c?.quantity ?? "");
@@ -121,18 +121,6 @@ export function ProductForm({ productId, defaults, originalCosts = {}, categorie
       router.refresh();
     });
   });
-
-  // Initial stock is keyed by variant position: removing a variant shifts the ones after it.
-  const removeVariant = (i: number) => {
-    const shifted: ProductFormValues["initial"] = {};
-    for (const [k, cell] of Object.entries(form.getValues("initial") ?? {})) {
-      const [idx, branch] = k.split(":");
-      const n = Number(idx);
-      if (n !== i) shifted[`${n > i ? n - 1 : n}:${branch}`] = cell;
-    }
-    variants.remove(i);
-    setValue("initial", shifted);
-  };
 
   const productFields = PRODUCT_FIELDS[kind];
   const variantFields = VARIANT_FIELDS[kind];
@@ -202,7 +190,7 @@ export function ProductForm({ productId, defaults, originalCosts = {}, categorie
         )}
         {kind === "ophthalmic_lens" && (
           <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-            La graduación de cada paciente no se registra aquí: va en la fórmula y en la orden óptica. Crea una variante solo si vendes rangos distintos con precios distintos.
+            La graduación de cada paciente no se registra aquí: va en la fórmula y en la orden óptica.
           </p>
         )}
         <FormField id="description" label="Descripción" optional>
@@ -210,77 +198,75 @@ export function ProductForm({ productId, defaults, originalCosts = {}, categorie
         </FormField>
       </FormSection>
 
-      <FormSection title="Variantes" description={hasColor
-        ? "Cada color o talla que vendes por separado. Cada variante tiene su propio SKU, código de barras y existencias."
-        : "Cada combinación que vendes por separado, con su propio SKU y existencias."}>
-        <div className="grid gap-3">
-          {variants.fields.map((field, i) => {
-            const saved = !!watchedVariants[i]?.id;
-            const active = watchedVariants[i]?.is_active ?? true;
-            return (
-              <div key={field.key} className={cn("grid gap-3 rounded-xl border p-4", !active && "bg-muted/50")}>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium">Variante {i + 1}{!active && <span className="ml-2 text-xs font-normal text-muted-foreground">inactiva</span>}</p>
-                  {saved ? (
-                    <Controller control={control} name={`variants.${i}.is_active`} render={({ field: f }) => (
-                      <label className="inline-flex items-center gap-2 text-sm text-muted-foreground"><Checkbox checked={f.value} onCheckedChange={(c) => f.onChange(!!c)} /> Activa</label>
-                    )} />
-                  ) : variants.fields.length > 1 && (
-                    <Button type="button" variant="ghost" size="sm" onClick={() => removeVariant(i)} aria-label={`Quitar variante ${i + 1}`}><Trash2 /> Quitar</Button>
-                  )}
+      <FormSection title="Características" description={hasColor || variantFields.length
+        ? "Cómo se ve y qué medidas tiene. Si vendes otro color o calibre, créalo como otro producto."
+        : "La foto con la que se reconoce en el catálogo."}>
+        {extraVariants > 0 && (
+          <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            Este producto se creó con {extraVariants + 1} presentaciones. Aquí editas la principal; las otras se conservan sin cambios.
+          </p>
+        )}
+        {(hasColor || variantFields.length > 0) && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {hasColor && (
+              <FormField id="v0-color" label="Color" optional error={err("variants.0.color_name")}>
+                <div className="flex gap-2">
+                  <Input id="v0-color" placeholder="Negro mate" {...register("variants.0.color_name")} aria-invalid={!!err("variants.0.color_name")} />
+                  <Controller control={control} name="variants.0.color_hex" render={({ field: f }) => (
+                    <input type="color" aria-label="Tono del color" value={f.value || "#888888"} onChange={(e) => f.onChange(e.target.value)}
+                      className="h-9 w-10 shrink-0 cursor-pointer rounded-lg border bg-surface p-1" />
+                  )} />
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {hasColor && (
-                    <FormField id={`v${i}-color`} label="Color" optional error={err(`variants.${i}.color_name`)}>
-                      <div className="flex gap-2">
-                        <Input id={`v${i}-color`} placeholder="Negro mate" {...register(`variants.${i}.color_name`)} aria-invalid={!!err(`variants.${i}.color_name`)} />
-                        <Controller control={control} name={`variants.${i}.color_hex`} render={({ field: f }) => (
-                          <input type="color" aria-label="Tono del color" value={f.value || "#888888"} onChange={(e) => f.onChange(e.target.value)}
-                            className="h-9 w-10 shrink-0 cursor-pointer rounded-lg border bg-surface p-1" />
-                        )} />
-                      </div>
-                    </FormField>
-                  )}
-                  {variantFields.map((f) => (
-                    <FormField key={f.key} id={`v${i}-${f.key}`} label={f.label} optional>
-                      <Input id={`v${i}-${f.key}`} placeholder={f.placeholder} {...register(`variants.${i}.attributes.${f.key}`)} />
-                    </FormField>
-                  ))}
-                  <FormField id={`v${i}-sku`} label="SKU o referencia interna" error={err(`variants.${i}.sku`)} hint={!saved ? "Vacío = automático" : undefined}>
-                    <Input id={`v${i}-sku`} placeholder="Automático" className="font-mono uppercase" {...register(`variants.${i}.sku`)} aria-invalid={!!err(`variants.${i}.sku`)} />
-                  </FormField>
-                  <FormField id={`v${i}-barcode`} label="Código de barras" optional error={err(`variants.${i}.barcode`)}>
-                    <Input id={`v${i}-barcode`} inputMode="numeric" className="font-mono" {...register(`variants.${i}.barcode`)} aria-invalid={!!err(`variants.${i}.barcode`)} />
-                  </FormField>
-                  <FormField id={`v${i}-price`} label="Precio de venta (IVA incluido)" error={err(`variants.${i}.price`)}>
-                    <MoneyInput id={`v${i}-price`} control={control} name={`variants.${i}.price`} invalid={!!err(`variants.${i}.price`)} />
-                  </FormField>
-                  {canCosts && (
-                    <FormField id={`v${i}-cost`} label={saved ? "Costo unitario promedio" : "Costo unitario"} optional error={err(`variants.${i}.cost`)}
-                      hint={saved ? "Las compras lo recalculan; cambiarlo revalúa el stock" : "Sin IVA. Solo lo ve quien tiene permiso de costos"}>
-                      <MoneyInput id={`v${i}-cost`} control={control} name={`variants.${i}.cost`} invalid={!!err(`variants.${i}.cost`)} />
-                    </FormField>
-                  )}
-                  <FormField id={`v${i}-image`} label="Enlace de la imagen" optional error={err(`variants.${i}.image_url`)} className="sm:col-span-2">
-                    <Input id={`v${i}-image`} type="url" placeholder="https://…" {...register(`variants.${i}.image_url`)} aria-invalid={!!err(`variants.${i}.image_url`)} />
-                  </FormField>
-                </div>
-              </div>
-            );
-          })}
-          <Button type="button" variant="outline" className="justify-self-start" onClick={() => variants.append({ ...EMPTY_VARIANT, price: form.getValues("variants.0.price") ?? "" })}>
-            <Plus /> Agregar variante
-          </Button>
-          {err("variants") && <p role="alert" className="text-xs text-destructive">{err("variants")}</p>}
-        </div>
+              </FormField>
+            )}
+            {variantFields.map((f) => (
+              <FormField key={f.key} id={`v0-${f.key}`} label={f.label} optional>
+                <Input id={`v0-${f.key}`} placeholder={f.placeholder} {...register(`variants.0.attributes.${f.key}`)} />
+              </FormField>
+            ))}
+          </div>
+        )}
+        <FormField id="v0-image" label="Enlace de la foto" optional error={err("variants.0.image_url")} hint="Pega el enlace de una imagen publicada (tu web, Instagram, el proveedor)">
+          <div className="flex gap-3">
+            <Input id="v0-image" type="url" placeholder="https://…" {...register("variants.0.image_url")} aria-invalid={!!err("variants.0.image_url")} />
+            {/^https?:\/\/\S+$/.test(main?.image_url ?? "") && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={main!.image_url} alt="" className="size-9 shrink-0 rounded-lg border object-cover" />
+            )}
+          </div>
+        </FormField>
       </FormSection>
 
-      <FormSection title="Impuestos" description="Los precios se registran con IVA incluido. Confirma con tu contador la tarifa de cada producto.">
-        <FormField id="tax_rate" label="Tratamiento de IVA" className="sm:max-w-xs">
-          <NativeSelect id="tax_rate" {...register("tax_rate")}>
-            {TAX_RATES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-          </NativeSelect>
-        </FormField>
+      <FormSection title="Precio" description="El precio se registra con IVA incluido. Confirma con tu contador la tarifa de cada producto.">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField id="v0-price" label="Precio de venta (IVA incluido)" error={err("variants.0.price")}>
+            <MoneyInput id="v0-price" control={control} name="variants.0.price" invalid={!!err("variants.0.price")} />
+          </FormField>
+          <FormField id="tax_rate" label="IVA">
+            <NativeSelect id="tax_rate" {...register("tax_rate")}>
+              {TAX_RATES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </NativeSelect>
+          </FormField>
+          {canCosts && (
+            <FormField id="v0-cost" label={main?.id ? "Costo promedio" : "Costo de compra"} optional error={err("variants.0.cost")}
+              hint={main?.id ? "Las compras lo recalculan; cambiarlo revalúa el stock" : "Sin IVA. Solo lo ve quien tiene permiso de costos"}>
+              <MoneyInput id="v0-cost" control={control} name="variants.0.cost" invalid={!!err("variants.0.cost")} />
+            </FormField>
+          )}
+        </div>
+        <PriceSummary price={money(main?.price ?? "")} cost={canCosts ? money(main?.cost ?? "") : undefined} taxRate={Number(taxRate)} />
+      </FormSection>
+
+      <FormSection title="Códigos" description="Para encontrarlo rápido y escanearlo en caja.">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField id="v0-sku" label="SKU o referencia interna" error={err("variants.0.sku")} hint={!main?.id ? "Si lo dejas vacío, lo creamos automáticamente" : undefined}>
+            <Input id="v0-sku" placeholder="Automático" className="font-mono uppercase" {...register("variants.0.sku")} aria-invalid={!!err("variants.0.sku")} />
+          </FormField>
+          <FormField id="v0-barcode" label="Código de barras" optional error={err("variants.0.barcode")}>
+            <Input id="v0-barcode" inputMode="numeric" className="font-mono" {...register("variants.0.barcode")} aria-invalid={!!err("variants.0.barcode")} />
+          </FormField>
+        </div>
+        {err("variants") && <p role="alert" className="text-xs text-destructive">{err("variants")}</p>}
       </FormSection>
 
       <FormSection title="Configuración de inventario" description="Cómo se controlan las existencias de este producto en cada sede.">
@@ -318,8 +304,7 @@ export function ProductForm({ productId, defaults, originalCosts = {}, categorie
 
       {creating && isStocked && canAdjust && (
         <FormSection title="Existencias iniciales" description="Opcional. Se registran como movimientos de carga inicial con tu usuario, la fecha y la sede. Después, el stock solo cambia con movimientos.">
-          <InitialStock control={control} register={register} err={err} branches={branches} variants={variants.fields.map((f, i) => ({ id: String(i), key: f.key, label: variantTitle(watchedVariants[i], i, hasColor) }))}
-            trackLots={trackLots} unit={unit} />
+          <InitialStock control={control} register={register} err={err} branches={branches} trackLots={trackLots} unit={unit} />
         </FormSection>
       )}
 
@@ -331,9 +316,23 @@ export function ProductForm({ productId, defaults, originalCosts = {}, categorie
   );
 }
 
-function variantTitle(v: VariantValues | undefined, i: number, hasColor: boolean) {
-  const parts = [hasColor ? v?.color_name : "", ...Object.values(v?.attributes ?? {})].filter(Boolean);
-  return parts.length ? parts.join(" · ") : `Variante ${i + 1}`;
+/** Live breakdown under the price: what is tax and, with costs, what the sale leaves. */
+function PriceSummary({ price, cost, taxRate }: { price?: number; cost?: number; taxRate: number }) {
+  if (!price) return null;
+  const net = price / (1 + taxRate / 100);
+  const fmt = (n: number) => `$ ${Math.round(n).toLocaleString("es-CO")}`;
+  const items: [string, string, string?][] = [["Precio sin IVA", fmt(net)], ["IVA", fmt(price - net)]];
+  if (cost) {
+    const margin = net - cost;
+    items.push(["Ganancia por unidad", fmt(margin), margin < 0 ? "text-destructive" : undefined], ["Margen", `${Math.round((margin / net) * 100)} %`, margin < 0 ? "text-destructive" : undefined]);
+  }
+  return (
+    <dl className="grid grid-cols-2 gap-3 rounded-xl bg-muted/50 p-4 sm:grid-cols-4">
+      {items.map(([k, val, cls]) => (
+        <div key={k}><dt className="text-xs text-muted-foreground">{k}</dt><dd className={cn("text-sm font-medium tabular", cls)}>{val}</dd></div>
+      ))}
+    </dl>
+  );
 }
 
 function MoneyInput({ id, control, name, invalid }: { id: string; control: ReturnType<typeof useForm<ProductFormValues>>["control"]; name: `variants.${number}.price` | `variants.${number}.cost`; invalid?: boolean }) {
@@ -351,50 +350,37 @@ function MoneyInput({ id, control, name, invalid }: { id: string; control: Retur
   );
 }
 
-function InitialStock({ control, register, err, branches, variants, trackLots, unit }: {
+function InitialStock({ control, register, err, branches, trackLots, unit }: {
   control: ReturnType<typeof useForm<ProductFormValues>>["control"]; register: ReturnType<typeof useForm<ProductFormValues>>["register"];
-  err: (name: string) => string | undefined; branches: { id: string; name: string }[]; variants: { id: string; key: string; label: string }[]; trackLots: boolean; unit: Unit;
+  err: (name: string) => string | undefined; branches: { id: string; name: string }[]; trackLots: boolean; unit: Unit;
 }) {
   const values = useWatch({ control, name: "initial" });
   const total = useMemo(() => Object.values(values ?? {}).reduce((a, c) => a + (Number(c?.quantity) || 0), 0), [values]);
   return (
     <div className="grid gap-3">
-      <div className="overflow-x-auto rounded-xl border">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 font-medium">Variante</th>
-              {branches.map((b) => <th key={b.id} className="px-3 py-2 font-medium">{b.name}</th>)}
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {variants.map((v) => (
-              <tr key={v.key}>
-                <td className="px-3 py-2 align-top whitespace-nowrap">{v.label}</td>
-                {branches.map((b) => {
-                  const key = `initial.${v.id}:${b.id}`;
-                  return (
-                    <td key={b.id} className="px-3 py-2 align-top">
-                      <div className="grid min-w-32 gap-1.5">
-                        <Input aria-label={`Cantidad de ${v.label} en ${b.name}`} inputMode="numeric" placeholder="0" className="h-8"
-                          {...register(`${key}.quantity` as `initial.${string}.quantity`)} aria-invalid={!!err(`${key}.quantity`)} />
-                        {trackLots && (
-                          <>
-                            <Input aria-label="Lote" placeholder="Lote" className="h-8 font-mono uppercase" {...register(`${key}.lot_code` as `initial.${string}.lot_code`)} aria-invalid={!!err(`${key}.lot_code`)} />
-                            <Input aria-label="Vencimiento" type="date" className="h-8" {...register(`${key}.expires_on` as `initial.${string}.expires_on`)} />
-                          </>
-                        )}
-                        {(err(`${key}.quantity`) || err(`${key}.lot_code`)) && <p className="text-xs text-destructive">{err(`${key}.quantity`) ?? err(`${key}.lot_code`)}</p>}
-                      </div>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="divide-y rounded-xl border">
+        {branches.map((b) => {
+          const key = `initial.0:${b.id}`;
+          const error = err(`${key}.quantity`) ?? err(`${key}.lot_code`);
+          return (
+            <div key={b.id} className={cn("grid gap-2 px-4 py-3", !trackLots && "sm:grid-cols-[minmax(0,1fr)_7rem] sm:items-center")}>
+              <span className="text-sm font-medium">{b.name}</span>
+              <div className={cn("grid gap-2", trackLots && "sm:grid-cols-3")}>
+                <Input aria-label={`Cantidad en ${b.name}`} inputMode="numeric" placeholder="0" className="tabular"
+                  {...register(`${key}.quantity` as `initial.${string}.quantity`)} aria-invalid={!!err(`${key}.quantity`)} />
+                {trackLots && (
+                  <>
+                    <Input aria-label={`Lote en ${b.name}`} placeholder="Lote" className="font-mono uppercase" {...register(`${key}.lot_code` as `initial.${string}.lot_code`)} aria-invalid={!!err(`${key}.lot_code`)} />
+                    <Input aria-label={`Vencimiento en ${b.name}`} type="date" {...register(`${key}.expires_on` as `initial.${string}.expires_on`)} />
+                  </>
+                )}
+              </div>
+              {error && <p className={cn("text-xs text-destructive", !trackLots && "sm:col-span-2")}>{error}</p>}
+            </div>
+          );
+        })}
       </div>
-      <p className="text-xs text-muted-foreground tabular">{total > 0 ? `Se registrarán ${total} ${UNIT_LABEL[unit].toLowerCase()}${total === 1 ? "" : "s"} como carga inicial.` : "Deja en 0 las sedes sin existencias."}</p>
+      <p className="text-xs text-muted-foreground tabular">{total > 0 ? `Se registrarán ${total} ${UNIT_LABEL[unit].toLowerCase()}${total === 1 ? "" : "s"} como carga inicial.` : "Deja en blanco las sedes sin existencias."}</p>
     </div>
   );
 }

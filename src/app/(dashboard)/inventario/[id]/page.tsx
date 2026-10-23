@@ -38,7 +38,7 @@ export default async function ProductPage(props: PageProps<"/inventario/[id]">) 
   const product = await getProduct(db, ctx.tenant.id, id).catch(() => null);
   if (!product) notFound();
 
-  const tabs = TABS.filter((t) => (!("stocked" in t) || product.is_stocked) && (!("lots" in t) || product.track_lots || product.lots.length > 0));
+  const tabs = TABS.filter((t) => (t.key !== "variantes" || product.variants.length > 1) && (!("stocked" in t) || product.is_stocked) && (!("lots" in t) || product.track_lots || product.lots.length > 0));
   const tab = tabs.find((t) => t.key === sp.tab)?.key ?? "general";
   const href = (key: string) => (key === "general" ? `/inventario/${id}` : `/inventario/${id}?tab=${key}`);
   const first = product.variants.find((v) => v.image_url) ?? product.variants[0];
