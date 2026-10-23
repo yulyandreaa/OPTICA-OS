@@ -25,7 +25,7 @@ export default async function BillingPage() {
   const [{ data: invoices }, { data: paidSales }] = await Promise.all([
     db.from("invoices").select("id, number, status, cufe, total, issued_at, error_message, created_at, sale:sales(id, number, patient:patients(full_name))")
       .eq("tenant_id", ctx.tenant.id).order("created_at", { ascending: false }).limit(80),
-    db.from("sales").select("id, number, total, created_at, patient:patients(full_name)").eq("tenant_id", ctx.tenant.id).eq("status", "paid")
+    db.from("sales").select("id, number, total, created_at, patient:patients(full_name)").eq("tenant_id", ctx.tenant.id).eq("status", "completed").eq("payment_status", "paid")
       .gte("created_at", new Date(now - 45 * 86_400_000).toISOString()).order("created_at", { ascending: false }).limit(200),
   ]);
   const invoicedSales = new Set((invoices ?? []).filter((i) => ["accepted", "processing"].includes(i.status)).map((i) => i.sale?.id));

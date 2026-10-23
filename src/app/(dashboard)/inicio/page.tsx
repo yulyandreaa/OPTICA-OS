@@ -84,7 +84,7 @@ export default async function HomePage(props: PageProps<"/inicio">) {
     { show: canAppts && metrics.unconfirmed_tomorrow > 0, icon: CalendarCheck2, text: <><b>{metrics.unconfirmed_tomorrow}</b> sin confirmar para mañana</>, href: `/agenda?date=${addDaysKey(today, 1)}` },
     { show: readyOrders.length > 0, icon: FlaskConical, text: <><b>{readyOrders.length}</b> {readyOrders.length === 1 ? "orden lista" : "órdenes listas"} para entregar</>, href: "/ordenes" },
     { show: lowStock.length > 0, icon: Boxes, text: <><b>{lowStock.length}</b> productos con stock bajo</>, href: "/inventario?disponibilidad=low" },
-    { show: !!salesMonth && Number(salesMonth.balance_pending) > 0, icon: ShoppingBag, text: <><b>{formatCompactMoney(Number(salesMonth?.balance_pending ?? 0))}</b> por cobrar</>, href: "/ventas?estado=partial" },
+    { show: !!salesMonth && Number(salesMonth.balance_pending) > 0, icon: ShoppingBag, text: <><b>{formatCompactMoney(Number(salesMonth?.balance_pending ?? 0))}</b> por cobrar</>, href: "/ventas?estado=pending" },
     { show: recall.total > 0, icon: UserPlus, text: <><b>{recall.total}</b> oportunidades de control</>, href: "#oportunidades" },
   ].filter((i) => i.show);
 

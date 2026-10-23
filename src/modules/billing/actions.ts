@@ -15,10 +15,10 @@ export async function issueInvoiceAction(saleId: string): Promise<ActionResult<{
   const ctx = await getAppContext();
   if (!ctx || !can(ctx.grants, "billing.issue")) return fail("No tienes permiso para facturar.");
   const db = await createClient();
-  const { data: sale } = await db.from("sales").select("id, number, subtotal, tax_total, total, status, patient:patients(document_type, document_number, full_name, email)")
+  const { data: sale } = await db.from("sales").select("id, number, subtotal, tax_total, total, status, payment_status, patient:patients(document_type, document_number, full_name, email)")
     .eq("tenant_id", ctx.tenant.id).eq("id", saleId).single();
   if (!sale) return fail("No encontramos la venta.");
-  if (sale.status !== "paid") return fail("Solo se facturan ventas pagadas en su totalidad.");
+  if (sale.status !== "completed" || sale.payment_status !== "paid") return fail("Solo se facturan ventas registradas y pagadas en su totalidad.");
   const { data: existing } = await db.from("invoices").select("id, status, attempts").eq("tenant_id", ctx.tenant.id).eq("sale_id", saleId).order("created_at", { ascending: false });
   if (existing?.some((i) => i.status === "accepted" || i.status === "processing")) return fail("Esta venta ya tiene factura.");
 

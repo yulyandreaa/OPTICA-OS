@@ -1,12 +1,14 @@
 import "server-only";
 import type { ServerSupabase } from "@/lib/supabase/server";
 
+/** `status` filters by payment: "pending" = with balance (pending or partial), "paid" = fully paid. Voided sales never count as debt. */
 export async function listSales(db: ServerSupabase, tenantId: string, opts: { branchId: string | null; status?: string; createdBefore?: Date; limit?: number }) {
   let q = db.from("sales")
-    .select("id, number, status, total, paid_total, balance, created_at, patient:patients(id, full_name), seller:profiles!sales_seller_profile_fkey(full_name), branch:branches(name)")
+    .select("id, number, status, payment_status, total, paid_total, balance, created_at, patient:patients(id, full_name), seller:profiles!sales_seller_profile_fkey(full_name), branch:branches(name)")
     .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(opts.limit ?? 60);
   if (opts.branchId) q = q.eq("branch_id", opts.branchId);
-  if (opts.status) q = q.eq("status", opts.status);
+  if (opts.status === "pending") q = q.in("payment_status", ["pending", "partial"]).in("status", ["completed", "partially_returned"]);
+  else if (opts.status === "paid") q = q.eq("payment_status", "paid");
   if (opts.createdBefore) q = q.lt("created_at", opts.createdBefore.toISOString()).gt("balance", 0);
   const { data } = await q;
   return data ?? [];

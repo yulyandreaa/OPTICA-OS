@@ -1977,6 +1977,12 @@ export type Database = {
           created_by: string | null
           created_at: string
           updated_at: string
+          payment_terms: string | null
+          sent_at: string | null
+          accepted_at: string | null
+          rejected_at: string | null
+          rejection_reason: string | null
+          converted_at: string | null
         }
         Insert: {
           id?: string
@@ -1999,6 +2005,12 @@ export type Database = {
           created_by?: string | null
           created_at?: string
           updated_at?: string
+          payment_terms?: string | null
+          sent_at?: string | null
+          accepted_at?: string | null
+          rejected_at?: string | null
+          rejection_reason?: string | null
+          converted_at?: string | null
         }
         Update: {
           id?: string
@@ -2021,6 +2033,12 @@ export type Database = {
           created_by?: string | null
           created_at?: string
           updated_at?: string
+          payment_terms?: string | null
+          sent_at?: string | null
+          accepted_at?: string | null
+          rejected_at?: string | null
+          rejection_reason?: string | null
+          converted_at?: string | null
         }
         Relationships: [
           { foreignKeyName: "quotes_branch_id_tenant_id_fkey"; columns: ["branch_id","tenant_id"]; isOneToOne: false; referencedRelation: "branches"; referencedColumns: ["id","tenant_id"] },
@@ -2225,6 +2243,10 @@ export type Database = {
           idempotency_key: string | null
           created_at: string
           updated_at: string
+          payment_status: string
+          due_date: string | null
+          payment_terms: string | null
+          created_by: string | null
         }
         Insert: {
           id?: string
@@ -2246,6 +2268,10 @@ export type Database = {
           idempotency_key?: string | null
           created_at?: string
           updated_at?: string
+          payment_status?: string
+          due_date?: string | null
+          payment_terms?: string | null
+          created_by?: string | null
         }
         Update: {
           id?: string
@@ -2267,9 +2293,14 @@ export type Database = {
           idempotency_key?: string | null
           created_at?: string
           updated_at?: string
+          payment_status?: string
+          due_date?: string | null
+          payment_terms?: string | null
+          created_by?: string | null
         }
         Relationships: [
           { foreignKeyName: "sales_branch_id_tenant_id_fkey"; columns: ["branch_id","tenant_id"]; isOneToOne: false; referencedRelation: "branches"; referencedColumns: ["id","tenant_id"] },
+          { foreignKeyName: "sales_created_by_fkey"; columns: ["created_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
           { foreignKeyName: "sales_patient_id_tenant_id_fkey"; columns: ["patient_id","tenant_id"]; isOneToOne: false; referencedRelation: "patients"; referencedColumns: ["id","tenant_id"] },
           { foreignKeyName: "sales_prescription_id_tenant_id_fkey"; columns: ["prescription_id","tenant_id"]; isOneToOne: false; referencedRelation: "prescriptions"; referencedColumns: ["id","tenant_id"] },
           { foreignKeyName: "sales_quote_id_tenant_id_fkey"; columns: ["quote_id","tenant_id"]; isOneToOne: false; referencedRelation: "quotes"; referencedColumns: ["id","tenant_id"] },
@@ -2801,8 +2832,7 @@ export type Database = {
       branch_delete_blocker: { Args: { p_tenant: string; p_branch: string }; Returns: string }
       branch_delete_impact: { Args: { p_tenant: string; p_branch: string }; Returns: Json }
       cancel_transfer: { Args: { p_transfer: string; p_reason?: string }; Returns: string }
-      convert_quote: { Args: { p_quote: string; p_payments: Json; p_idempotency_key?: string }; Returns: string }
-      create_quote: { Args: { p: Json }; Returns: string }
+      convert_quote: { Args: { p_quote: string; p_payments: Json; p_idempotency_key?: string; p_options?: Json }; Returns: string }
       create_sale: { Args: { p: Json }; Returns: string }
       create_tenant: { Args: { p_trade_name: string; p_legal_name: string; p_slug: string; p_tax_id_type: string; p_tax_id: string; p_tax_dv: string; p_tax_regime: string; p_specialty: string; p_branch_name: string; p_branch_city: string; p_branch_address: string; p_branch_phone: string }; Returns: string }
       create_transfer: { Args: { p: Json }; Returns: string }
@@ -2821,6 +2851,7 @@ export type Database = {
       people_summary: { Args: { p_tenant: string }; Returns: Json }
       product_has_history: { Args: { p_tenant: string; p_product: string }; Returns: boolean }
       public_quote: { Args: { p_token: string }; Returns: Json }
+      quote_conversion_check: { Args: { p_quote: string }; Returns: Json }
       recall_opportunities: { Args: { p_tenant: string; p_limit?: number }; Returns: { patient_id: string | null; full_name: string | null; phone: string | null; last_visit: string | null; months_since: number | null }[] }
       recall_opportunities_count: { Args: { p_tenant: string }; Returns: number }
       receive_purchase_order: { Args: { p_order: string; p_items: Json; p_key?: string }; Returns: string }
@@ -2828,8 +2859,10 @@ export type Database = {
       record_movement: { Args: { p: Json }; Returns: string }
       report_sales: { Args: { p_tenant: string; p_from: string; p_to: string; p_branch?: string }; Returns: Json }
       save_product: { Args: { p: Json }; Returns: string }
+      save_quote: { Args: { p: Json }; Returns: string }
       set_main_branch: { Args: { p_tenant: string; p_branch: string }; Returns: undefined }
       set_min_stock: { Args: { p_tenant: string; p_branch: string; p_variant: string; p_min: number }; Returns: undefined }
+      set_quote_status: { Args: { p_quote: string; p_status: string; p_reason?: string }; Returns: string }
       sign_medical_record: { Args: { p_record: string }; Returns: Json }
       slug_available: { Args: { p_slug: string }; Returns: boolean }
       track_lab_order: { Args: { p_token: string }; Returns: Json }

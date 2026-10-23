@@ -94,10 +94,11 @@ describe("golden path", () => {
     saleId = (await one<{ id: string }>(sales, `select public.create_sale($1) as id`, [payload])).id;
     const again = (await one<{ id: string }>(sales, `select public.create_sale($1) as id`, [payload])).id;
     expect(again).toBe(saleId);
-    const s = await one<{ total: string; paid_total: string; balance: string; status: string; tax_total: string }>(sales, `select total, paid_total, balance, status, tax_total from public.sales where id = $1`, [saleId]);
+    const s = await one<{ total: string; paid_total: string; balance: string; status: string; payment_status: string; tax_total: string }>(sales, `select total, paid_total, balance, status, payment_status, tax_total from public.sales where id = $1`, [saleId]);
     expect(Number(s.total)).toBe(865000);
     expect(Number(s.balance)).toBe(365000);
-    expect(s.status).toBe("partial");
+    expect(s.status).toBe("completed");
+    expect(s.payment_status).toBe("partial");
     expect(Number(s.tax_total)).toBeCloseTo(865000 - 865000 / 1.19, 0);
     const lvl = await one<{ quantity: string }>(owner, `select quantity from public.inventory_levels where variant_id = $1`, [frameVariant]);
     expect(Number(lvl.quantity)).toBe(2);
@@ -109,7 +110,7 @@ describe("golden path", () => {
   });
 
   it("cotización → venta sin reescribir", async () => {
-    const q = (await one<{ id: string }>(sales, `select public.create_quote($1) as id`, [{ tenant_id: tenant, branch_id: branch, patient_id: patient, items: [{ variant_id: frameVariant, quantity: 1 }] }])).id;
+    const q = (await one<{ id: string }>(sales, `select public.save_quote($1) as id`, [{ tenant_id: tenant, branch_id: branch, patient_id: patient, status: "sent", items: [{ variant_id: frameVariant, quantity: 1 }] }])).id;
     const sale = (await one<{ id: string }>(sales, `select public.convert_quote($1, $2) as id`, [q, [{ method: "nequi", amount: 485000 }]])).id;
     const st = await one<{ status: string; sale_id: string }>(sales, `select status, sale_id from public.quotes where id = $1`, [q]);
     expect(st).toEqual({ status: "converted", sale_id: sale });

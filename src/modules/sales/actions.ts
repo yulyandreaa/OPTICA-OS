@@ -10,7 +10,7 @@ const item = z.object({
   variantId: z.uuid(), quantity: z.number().positive().max(999), discount: z.number().min(0).default(0),
 });
 const payment = z.object({
-  method: z.enum(["cash", "card", "transfer", "nequi", "daviplata", "wompi", "credit"]), amount: z.number().positive(), reference: z.string().max(80).optional(),
+  method: z.enum(["cash", "card", "transfer", "nequi", "daviplata", "wompi"]), amount: z.number().positive(), reference: z.string().max(80).optional(),
 });
 const saleSchema = z.object({
   patientId: z.uuid().nullable(), prescriptionId: z.uuid().nullable().optional(), notes: z.string().max(500).optional(),
@@ -66,9 +66,10 @@ export async function createQuoteAction(input: z.input<typeof quoteSchema>): Pro
   if (!parsed.success) return fromZod(parsed.error);
   const v = parsed.data;
   const db = await createClient();
-  const { data, error } = await db.rpc("create_quote", { p: {
+  const validUntil = new Date(Date.now() + v.validDays * 86_400_000).toISOString().slice(0, 10);
+  const { data, error } = await db.rpc("save_quote", { p: {
     tenant_id: ctx.tenant.id, branch_id: branchId, patient_id: v.patientId, prescription_id: v.prescriptionId ?? null, notes: v.notes ?? null,
-    valid_days: v.validDays, items: v.items.map((i) => ({ variant_id: i.variantId, quantity: i.quantity, discount: i.discount })),
+    status: "sent", valid_until: validUntil, items: v.items.map((i) => ({ variant_id: i.variantId, quantity: i.quantity, discount: i.discount })),
   } });
   if (error) return fromError("quotes.create", error);
   revalidatePath("/cotizaciones");

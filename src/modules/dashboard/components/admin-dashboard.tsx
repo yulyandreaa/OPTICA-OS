@@ -237,7 +237,7 @@ function AlertCards({ s }: { s: DashboardSummary }) {
           }))} />
         )}
       </AlertCard>
-      <AlertCard icon={Receipt} tone="blue" title="Cartera vencida" subtitle="Saldos con más de 30 días" count={s.receivables.overdue_count} href="/ventas?estado=partial&vencidas=1" cta="Ver cartera">
+      <AlertCard icon={Receipt} tone="blue" title="Cartera vencida" subtitle="Saldos con más de 30 días" count={s.receivables.overdue_count} href="/ventas?estado=pending&vencidas=1" cta="Ver cartera">
         {s.receivables.overdue_count === 0 ? <AllGood>Sin saldos vencidos.</AllGood> : (
           <Rows rows={a.overdue.map((o) => ({ key: o.sale_id, href: `/ventas/${o.sale_id}`, left: o.customer ?? `Venta ${o.number}`, right: formatMoney(o.balance) }))} />
         )}

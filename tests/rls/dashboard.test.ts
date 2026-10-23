@@ -8,6 +8,7 @@ import { asUser, connect, createAuthUser, expectDenied, type Db } from "./helper
 const suffix = `db${Date.now().toString(36)}`;
 
 describe("dashboard del administrador", () => {
+  let lensCategory = "";
   let db: Db;
   let owner: string, sales: string, outsider: string;
   let tenant: string, main: string, second: string, patient: string;
@@ -39,17 +40,27 @@ describe("dashboard del administrador", () => {
     await one(owner, `insert into public.variant_costs (tenant_id, variant_id, avg_cost) values ($1, $2, 40000) returning variant_id`, [tenant, frame]);
     await one(owner, `insert into public.inventory_movements (tenant_id, branch_id, variant_id, type, quantity) values ($1, $2, $3, 'initial', 3) returning id`, [tenant, main, frame]);
 
+    // Catalog items without stock control (sold by order) and without cost: prices always come from the catalog.
+    const lensCat = (await db.query<{ id: string; name: string }>(`select id, name from public.product_categories where tenant_id = $1 and code = 'ophthalmic_lenses'`, [tenant])).rows[0]!;
+    const unstocked = async (name: string, sku: string, price: number, category = cat) => {
+      const p = (await one<{ id: string }>(owner, `insert into public.products (tenant_id, category_id, name, is_stocked) values ($1, $2, $3, false) returning id`, [tenant, category, name])).id;
+      return (await one<{ id: string }>(owner, `insert into public.product_variants (tenant_id, product_id, sku, price) values ($1, $2, $3, $4) returning id`, [tenant, p, sku, price])).id;
+    };
+    const lens = await unstocked("Lente progresivo", "L-1", 238000, lensCat.id);
+    lensCategory = lensCat.name;
+    const caseItem = await unstocked("Estuche", "E-1", 59500);
+    const sunglasses = await unstocked("Gafas de sol", "G-1", 119000);
     const sale = (branch: string, items: unknown[], payments: unknown[]) =>
       one<{ id: string }>(owner, `select public.create_sale($1) as id`, [{ tenant_id: tenant, branch_id: branch, patient_id: patient, items, payments }]).then((x) => x.id);
     // A: frame with cost, fully paid in cash. Net = 119000/1.19 = 100000, cost 40000 → margin 60000.
     await sale(main, [{ variant_id: frame, quantity: 1 }], [{ method: "cash", amount: 119000 }]);
-    // B: free-text lens with no cost, half paid. Net 200000, no cost → lowers coverage. Balance 119000.
-    await sale(second, [{ description: "Lente progresivo", unit_price: 238000, quantity: 1 }], [{ method: "card", amount: 119000 }]);
+    // B: lens with no cost, half paid. Net 200000, no cost → lowers coverage. Balance 119000.
+    await sale(second, [{ variant_id: lens, quantity: 1 }], [{ method: "card", amount: 119000 }]);
     // C: cancelled sale → excluded from net sales, collected and receivables.
-    const cancelled = await sale(main, [{ description: "Estuche", unit_price: 59500, quantity: 1 }], [{ method: "cash", amount: 10000 }]);
-    await db.query(`update public.sales set status = 'cancelled' where id = $1`, [cancelled]);
+    const cancelled = await sale(main, [{ variant_id: caseItem, quantity: 1 }], [{ method: "cash", amount: 10000 }]);
+    await db.query(`update public.sales set status = 'voided' where id = $1`, [cancelled]);
     // D: 45-day-old sale with balance → overdue receivable, outside today's period.
-    const old = await sale(main, [{ description: "Gafas de sol", unit_price: 119000, quantity: 1 }], []);
+    const old = await sale(main, [{ variant_id: sunglasses, quantity: 1 }], []);
     await db.query(`update public.sales set created_at = now() - interval '45 days' where id = $1`, [old]);
 
     const lab = (await one<{ id: string }>(owner, `insert into public.labs (tenant_id, name) values ($1, 'Lab X') returning id`, [tenant])).id;
@@ -100,7 +111,7 @@ describe("dashboard del administrador", () => {
     const r = await summary(owner) as unknown as {
       by_category: { category: string; net: number }[]; top_products: { description: string; net: number }[]; by_seller: { name: string; net: number; count: number }[];
     };
-    expect(r.by_category.map((c) => c.category).sort()).toEqual(["Monturas", "Otros"]);
+    expect(r.by_category.map((c) => c.category).sort()).toEqual(["Monturas", lensCategory].sort());
     expect(r.top_products.map((p) => [p.description, p.net])).toEqual([["Lente progresivo", 200000], ["Montura", 100000]]);
     expect(r.by_seller).toEqual([expect.objectContaining({ name: "Dueña", net: 300000, count: 2 })]);
   });

@@ -27,7 +27,7 @@ import { StartConsultationButton } from "@/modules/clinical/components/start-con
 import { RxTable } from "@/modules/clinical/components/rx-table";
 import { RECORD_STATUS, RECORD_TYPES, LENS_TYPES } from "@/modules/clinical/constants";
 import { listPatientPrescriptions } from "@/modules/clinical/repositories";
-import { PAYMENT_METHODS, SALE_STATUS, QUOTE_STATUS } from "@/modules/sales/constants";
+import { PAYMENT_METHOD_LABEL, SALE_STATUS, QUOTE_STATUS } from "@/modules/sales/constants";
 import { LAB_STATUS, type LabStatus } from "@/modules/labs/constants";
 import { INVOICE_STATUS } from "@/modules/billing/constants";
 import { formatMoney } from "@/lib/format";
@@ -335,7 +335,7 @@ async function loadTab(db: Awaited<ReturnType<typeof createClient>>, ctx: Ctx, p
     const { data } = await db.from("sales").select("id, number, status, total, balance, created_at").eq("tenant_id", t).eq("patient_id", patientId).order("created_at", { ascending: false });
     if (!data?.length) return empty("Sin compras todavía");
     // Same rule as the dashboard: cancelled and returned sales don't count as purchases or debt.
-    const valid = data.filter((s) => s.status === "partial" || s.status === "paid");
+    const valid = data.filter((s) => s.status === "completed" || s.status === "partially_returned");
     const total = valid.reduce((a, s) => a + Number(s.total), 0);
     const balance = valid.reduce((a, s) => a + Number(s.balance), 0);
     const { data: payments } = await db.from("payments").select("id, method, amount, created_at, sale:sales!inner(id, number, patient_id)")
@@ -348,12 +348,12 @@ async function loadTab(db: Awaited<ReturnType<typeof createClient>>, ctx: Ctx, p
           <MiniStat label="Compras" value={String(valid.length)} />
         </div>
         <Panel title="Compras" bodyClassName="p-0"><ul className="divide-y">{data.map((s) =>
-          row(`/ventas/${s.id}`, <span className="font-mono">{s.number}</span>, `${formatDate(s.created_at, tz)}${Number(s.balance) > 0 && s.status === "partial" ? ` · saldo ${formatMoney(s.balance)}` : ""}`,
+          row(`/ventas/${s.id}`, <span className="font-mono">{s.number}</span>, `${formatDate(s.created_at, tz)}${Number(s.balance) > 0 && s.status !== "voided" && s.status !== "returned" ? ` · saldo ${formatMoney(s.balance)}` : ""}`,
             <span className="flex items-center gap-3"><span className="text-sm tabular">{formatMoney(s.total)}</span><StatusBadge tone={SALE_STATUS[s.status]?.tone}>{SALE_STATUS[s.status]?.label}</StatusBadge></span>, s.id))}</ul></Panel>
         <Panel title="Pagos recibidos" description="Últimos 20" bodyClassName="p-0">
           {!payments?.length ? <p className="px-4 py-6 text-sm text-muted-foreground">Sin pagos registrados.</p> : (
             <ul className="divide-y">{payments.map((p) =>
-              row(`/ventas/${p.sale.id}`, PAYMENT_METHODS[p.method as keyof typeof PAYMENT_METHODS] ?? p.method, `${formatDate(p.created_at, tz)} · venta ${p.sale.number}`,
+              row(`/ventas/${p.sale.id}`, PAYMENT_METHOD_LABEL[p.method] ?? p.method, `${formatDate(p.created_at, tz)} · venta ${p.sale.number}`,
                 <span className="text-sm font-medium tabular">{formatMoney(p.amount)}</span>, p.id))}</ul>
           )}
         </Panel>

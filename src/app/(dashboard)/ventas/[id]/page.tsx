@@ -11,7 +11,7 @@ import { can } from "@/modules/authz/permissions";
 import { INVOICE_STATUS } from "@/modules/billing/constants";
 import { LAB_STATUS, type LabStatus } from "@/modules/labs/constants";
 import { AddPaymentForm, CreateLabOrderButton, IssueInvoiceButton } from "@/modules/sales/components/sale-actions";
-import { PAYMENT_METHODS, SALE_STATUS } from "@/modules/sales/constants";
+import { PAYMENT_METHOD_LABEL, PAYMENT_STATUS, SALE_STATUS } from "@/modules/sales/constants";
 import { getSale } from "@/modules/sales/repositories";
 import { requirePermission } from "@/modules/tenants/services/context";
 
@@ -24,7 +24,8 @@ export default async function SalePage(props: PageProps<"/ventas/[id]">) {
   const data = await getSale(await createClient(), ctx.tenant.id, id);
   if (!data) notFound();
   const { sale, items, payments, orders, invoices } = data;
-  const st = SALE_STATUS[sale.status] ?? SALE_STATUS.partial!;
+  const st = SALE_STATUS[sale.status] ?? SALE_STATUS.completed!;
+  const pay = PAYMENT_STATUS[sale.payment_status] ?? PAYMENT_STATUS.pending!;
   const tz = ctx.timezone;
   const hasLens = items.some((i) => i.category === "Lentes oftálmicos");
   const activeInvoice = invoices.find((i) => i.status === "accepted" || i.status === "processing");
@@ -32,7 +33,7 @@ export default async function SalePage(props: PageProps<"/ventas/[id]">) {
   return (
     <>
       <PageHeader eyebrow={<Link href="/ventas" className="hover:text-foreground">Ventas</Link>}
-        title={<span className="flex items-center gap-3"><span className="font-mono">{sale.number}</span><StatusBadge tone={st.tone}>{st.label}</StatusBadge></span>}
+        title={<span className="flex items-center gap-3"><span className="font-mono">{sale.number}</span><StatusBadge tone={st.tone}>{st.label}</StatusBadge><StatusBadge tone={pay.tone}>{pay.label}</StatusBadge></span>}
         description={`${formatDate(sale.created_at, tz, { dateStyle: "long" })} · ${formatTime(sale.created_at, tz)} · ${sale.branch?.name} · ${sale.seller?.full_name}`}
         actions={sale.patient && <Link href={`/pacientes/${sale.patient.id}?tab=compras`} className="text-sm text-muted-foreground hover:text-foreground">{sale.patient.full_name} →</Link>} />
 
@@ -61,7 +62,7 @@ export default async function SalePage(props: PageProps<"/ventas/[id]">) {
           <Panel title="Pagos" description={Number(sale.balance) > 0 ? `Saldo pendiente ${formatMoney(sale.balance)}` : "Pagada en su totalidad"}>
             <ul className="mb-3 grid gap-2">
               {payments.map((p) => (
-                <li key={p.id} className="flex justify-between text-sm"><span>{PAYMENT_METHODS[p.method as keyof typeof PAYMENT_METHODS]} · <span className="text-muted-foreground">{formatDate(p.created_at, tz)}</span></span><span className="tabular">{formatMoney(p.amount)}</span></li>
+                <li key={p.id} className="flex justify-between text-sm"><span>{PAYMENT_METHOD_LABEL[p.method] ?? p.method} · <span className="text-muted-foreground">{formatDate(p.created_at, tz)}</span></span><span className="tabular">{formatMoney(p.amount)}</span></li>
               ))}
               {payments.length === 0 && <li className="text-sm text-muted-foreground">Sin pagos registrados.</li>}
             </ul>
@@ -92,7 +93,7 @@ export default async function SalePage(props: PageProps<"/ventas/[id]">) {
                 </li>))}
               </ul>
             )}
-            {!activeInvoice && can(ctx.grants, "billing.issue") && (sale.status === "paid"
+            {!activeInvoice && can(ctx.grants, "billing.issue") && (sale.status === "completed" && sale.payment_status === "paid"
               ? <IssueInvoiceButton saleId={sale.id} retry={invoices.length > 0} />
               : <p className="text-sm text-muted-foreground">Se factura cuando la venta esté pagada.</p>)}
           </Panel>

@@ -46,7 +46,10 @@ describe("clientes y pacientes", () => {
   });
 
   it("una venta convierte al paciente también en cliente", async () => {
-    await one(sales, `select public.create_sale($1) as id`, [{ tenant_id: tenant, branch_id: branch, patient_id: luis, items: [{ description: "Estuche", unit_price: 20000, quantity: 1 }], payments: [] }]);
+    const cat = (await db.query<{ id: string }>(`select id from public.product_categories where tenant_id = $1 and code = 'frames'`, [tenant])).rows[0]!.id;
+    const product = (await db.query<{ id: string }>(`insert into public.products (tenant_id, category_id, name, is_stocked) values ($1, $2, 'Estuche', false) returning id`, [tenant, cat])).rows[0]!.id;
+    const variant = (await db.query<{ id: string }>(`insert into public.product_variants (tenant_id, product_id, sku, price) values ($1, $2, 'EST-1', 20000) returning id`, [tenant, product])).rows[0]!.id;
+    await one(sales, `select public.create_sale($1) as id`, [{ tenant_id: tenant, branch_id: branch, patient_id: luis, items: [{ variant_id: variant, quantity: 1 }], payments: [] }]);
     expect(await flags(luis)).toMatchObject({ is_customer: true, is_patient: true });
   });
 

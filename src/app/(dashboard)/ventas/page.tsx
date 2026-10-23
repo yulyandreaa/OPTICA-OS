@@ -11,7 +11,7 @@ import { addDaysKey, formatDate, formatMoney, formatTime, localDateKey, zonedTim
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { can } from "@/modules/authz/permissions";
-import { SALE_STATUS } from "@/modules/sales/constants";
+import { PAYMENT_STATUS, SALE_STATUS } from "@/modules/sales/constants";
 import { listSales } from "@/modules/sales/repositories";
 import { requirePermission } from "@/modules/tenants/services/context";
 
@@ -30,9 +30,9 @@ export default async function SalesPage(props: PageProps<"/ventas">) {
     branchId: ctx.activeBranchId, status, limit: 80,
     createdBefore: overdue ? zonedTimeToUtc(addDaysKey(today, -30), "00:00", ctx.timezone) : undefined,
   });
-  const todays = sales.filter((s) => localDateKey(new Date(s.created_at), ctx.timezone) === today && s.status !== "cancelled");
+  const todays = sales.filter((s) => localDateKey(new Date(s.created_at), ctx.timezone) === today && s.status !== "voided");
   const totalToday = todays.reduce((a, s) => a + Number(s.total), 0);
-  const pending = sales.filter((s) => s.status === "partial").reduce((a, s) => a + Number(s.balance), 0);
+  const pending = sales.filter((s) => s.status === "completed" || s.status === "partially_returned").reduce((a, s) => a + Number(s.balance), 0);
 
   return (
     <>
@@ -44,14 +44,14 @@ export default async function SalesPage(props: PageProps<"/ventas">) {
         <StatCard label="Saldos por cobrar" value={formatMoney(pending)} hint="en las últimas ventas" />
       </div>
       <nav className="mb-3 flex w-fit gap-1 rounded-lg bg-muted p-1">
-        {[[undefined, "Todas"], ["partial", "Con saldo"], ["paid", "Pagadas"]].map(([k, l]) => (
+        {[[undefined, "Todas"], ["pending", "Con saldo"], ["paid", "Pagadas"]].map(([k, l]) => (
           <Link key={l} href={k ? `/ventas?estado=${k}` : "/ventas"} className={cn("rounded-md px-3 py-1 text-sm", status === k ? "bg-surface font-medium shadow-soft" : "text-muted-foreground")}>{l}</Link>
         ))}
       </nav>
       {overdue && (
         <p className="mb-3 flex items-center gap-2 text-sm">
           Mostrando saldos de ventas con más de 30 días ({sales.length}).
-          <Link href="/ventas?estado=partial" className="text-muted-foreground underline hover:text-foreground">Ver todos los saldos</Link>
+          <Link href="/ventas?estado=pending" className="text-muted-foreground underline hover:text-foreground">Ver todos los saldos</Link>
         </p>
       )}
       <div className="overflow-hidden rounded-xl border bg-surface shadow-soft">
@@ -64,7 +64,8 @@ export default async function SalesPage(props: PageProps<"/ventas">) {
             </thead>
             <tbody className="divide-y">
               {sales.map((s) => {
-                const st = SALE_STATUS[s.status] ?? SALE_STATUS.partial!;
+                // A voided or returned sale shows that; otherwise what matters in the list is the payment.
+                const st = s.status === "completed" ? PAYMENT_STATUS[s.payment_status] ?? PAYMENT_STATUS.pending! : SALE_STATUS[s.status] ?? SALE_STATUS.completed!;
                 return (
                   <tr key={s.id} className="hover:bg-muted/40">
                     <td className="px-4 py-3"><Link href={`/ventas/${s.id}`} className="font-mono text-xs font-medium text-brand hover:underline">{s.number}</Link>
